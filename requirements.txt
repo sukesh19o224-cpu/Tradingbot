@@ -14,3 +14,5 @@ plotly
 setuptools
 wheel
 pytz
+scikit-learn>=1.0.0
+scipy>=1.7.0

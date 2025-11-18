@@ -178,21 +178,55 @@ BREAKOUT = {
     'MIN_VOLUME_SURGE': 2.0,             # Volume 2x+ on breakout
     'REQUIRE_ATR_EXPANSION': True,       # ATR must be expanding
     'BREAKOUT_CONFIRMATION': 0.01,       # Must break 1% above high
-    
+
     # Exit criteria
     'TARGETS': [0.06, 0.10, 0.15],       # Target levels: 6%, 10%, 15%
     'STOP_LOSS': 0.06,                   # Stop loss: 6% below entry
     'TIME_STOP_DAYS': 4,                 # Exit after 4 trading days if no momentum
-    
+
     # Position limits (Dynamic: Adjusts based on regime)
     'max_positions': 5,                  # Max 5 breakout positions (was 2)
     'min_score': 40,                     # Minimum score to qualify
-    
+
     # Capital allocation (if not using regime detection)
     'capital_allocation': 0.25,          # 25% of capital for breakout
-    
+
     # When to use this strategy
     'market_regimes': ['CONSOLIDATION', 'NEUTRAL']
+}
+
+# ============================================
+# 📈 STRATEGY 4: POSITIONAL/MONTHLY (NEW V5.0!)
+# ============================================
+# For medium to long-term trades (10-45 days)
+# Higher quality, longer holds, better win rate
+
+POSITIONAL = {
+    # Entry criteria (MORE STRINGENT than swing)
+    'MIN_UPTREND_DAYS': 20,              # Minimum 20 days in uptrend
+    'REQUIRE_MA_ALIGNMENT': True,        # Must be above MA50, MA100, MA200
+    'MIN_SHARPE_RATIO': 0.5,            # Minimum risk-adjusted returns
+    'MIN_PREDICTED_RETURN': 5.0,        # Minimum predicted return % (10 days)
+    'MIN_PREDICTION_CONFIDENCE': 60,    # Minimum prediction confidence %
+    'MAX_VOLATILITY': 60,               # Maximum volatility score (0-100)
+    'MIN_VOLUME_RATIO': 1.2,            # Volume vs average
+
+    # Exit criteria (WIDER than swing)
+    'TARGETS': [0.08, 0.15, 0.25],      # Target levels: 8%, 15%, 25%
+    'STOP_LOSS': 0.10,                  # Stop loss: 10% (wider for longer holds)
+    'MIN_HOLD_DAYS': 10,                # Minimum holding period
+    'MAX_HOLD_DAYS': 45,                # Maximum holding period
+    'DYNAMIC_TIME_STOP': True,          # Use dynamic time stops based on trend
+
+    # Position limits
+    'max_positions': 8,                 # Max 8 positional positions
+    'min_score': 50,                    # Higher minimum score (quality over quantity)
+
+    # Capital allocation
+    'capital_allocation': 0.30,         # 30% of capital for positional
+
+    # When to use this strategy
+    'market_regimes': ['TRENDING_UP', 'STRONG_BULL', 'NEUTRAL']  # Works in most conditions
 }
 
 # ============================================
@@ -220,6 +254,13 @@ STRATEGIES = {
         'max_positions': BREAKOUT['max_positions'],
         'min_score': BREAKOUT['min_score'],
         'market_regimes': BREAKOUT['market_regimes']
+    },
+    'POSITIONAL': {
+        'enabled': True,                 # NEW V5.0: Monthly/positional trading
+        'capital_allocation': POSITIONAL['capital_allocation'],
+        'max_positions': POSITIONAL['max_positions'],
+        'min_score': POSITIONAL['min_score'],
+        'market_regimes': POSITIONAL['market_regimes']
     }
 }
 

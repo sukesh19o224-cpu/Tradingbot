@@ -52,11 +52,12 @@ class PortfolioManager:
         self.positions = {}
         self.trade_history = []
         
-        # V4.0 NEW: Strategy tracking
+        # V4.0 NEW: Strategy tracking (V5.0 added POSITIONAL)
         self.strategy_stats = {
             'MOMENTUM': {'trades': 0, 'wins': 0, 'losses': 0, 'pnl': 0},
             'MEAN_REVERSION': {'trades': 0, 'wins': 0, 'losses': 0, 'pnl': 0},
-            'BREAKOUT': {'trades': 0, 'wins': 0, 'losses': 0, 'pnl': 0}
+            'BREAKOUT': {'trades': 0, 'wins': 0, 'losses': 0, 'pnl': 0},
+            'POSITIONAL': {'trades': 0, 'wins': 0, 'losses': 0, 'pnl': 0}  # V5.0: Monthly trading
         }
         
         # Initialize Discord alerts
@@ -97,7 +98,8 @@ class PortfolioManager:
         self.strategy_stats = {
             'MOMENTUM': {'trades': 0, 'wins': 0, 'losses': 0, 'pnl': 0},
             'MEAN_REVERSION': {'trades': 0, 'wins': 0, 'losses': 0, 'pnl': 0},
-            'BREAKOUT': {'trades': 0, 'wins': 0, 'losses': 0, 'pnl': 0}
+            'BREAKOUT': {'trades': 0, 'wins': 0, 'losses': 0, 'pnl': 0},
+            'POSITIONAL': {'trades': 0, 'wins': 0, 'losses': 0, 'pnl': 0}  # V5.0
         }
         self._save_portfolio()
     
@@ -332,7 +334,7 @@ class PortfolioManager:
         
         if self.positions:
             print(f"\n📊 Positions by Strategy:")
-            for strategy in ['MOMENTUM', 'MEAN_REVERSION', 'BREAKOUT']:
+            for strategy in ['MOMENTUM', 'MEAN_REVERSION', 'BREAKOUT', 'POSITIONAL']:
                 count = len(self.get_positions_by_strategy(strategy))
                 if count > 0:
                     print(f"   {strategy:15s}: {count} positions")
@@ -648,7 +650,7 @@ class PortfolioGUI(tk.Tk):
                 entry = ttk.Entry(buy_frame, width=15, textvariable=self.symbol_var)
                 self.symbol_var.trace("w", self.update_suggestion_list)
             elif label == "Strategy":
-                entry = ttk.Combobox(buy_frame, width=13, values=["MOMENTUM", "MEAN_REVERSION", "BREAKOUT"])
+                entry = ttk.Combobox(buy_frame, width=13, values=["MOMENTUM", "MEAN_REVERSION", "BREAKOUT", "POSITIONAL"])
                 entry.set("MOMENTUM")
             else:
                 entry = ttk.Entry(buy_frame, width=15)
