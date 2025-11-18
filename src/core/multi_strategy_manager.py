@@ -15,6 +15,7 @@ from src.analyzers.regime_detector import RegimeDetector
 from src.strategies.momentum_strategy import MomentumStrategy
 from src.strategies.mean_reversion_strategy import MeanReversionStrategy
 from src.strategies.breakout_strategy import BreakoutStrategy
+from src.strategies.positional_strategy import PositionalStrategy
 
 
 class MultiStrategyManager:
@@ -39,15 +40,18 @@ class MultiStrategyManager:
         
         # Initialize all strategies
         self.strategies = {}
-        
+
         if STRATEGIES['MOMENTUM']['enabled']:
             self.strategies['MOMENTUM'] = MomentumStrategy()
-        
+
         if STRATEGIES['MEAN_REVERSION']['enabled']:
             self.strategies['MEAN_REVERSION'] = MeanReversionStrategy()
-        
+
         if STRATEGIES['BREAKOUT']['enabled']:
             self.strategies['BREAKOUT'] = BreakoutStrategy()
+
+        if STRATEGIES.get('POSITIONAL', {}).get('enabled', False):
+            self.strategies['POSITIONAL'] = PositionalStrategy()
         
         # State
         self.current_regime = None
