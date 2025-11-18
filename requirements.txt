@@ -1,0 +1,16 @@
+pandas
+numpy
+python-dotenv
+yfinance
+beautifulsoup4
+requests
+lxml
+sqlalchemy
+pandas-ta
+discord-webhook
+schedule
+streamlit
+plotly
+setuptools
+wheel
+pytz
