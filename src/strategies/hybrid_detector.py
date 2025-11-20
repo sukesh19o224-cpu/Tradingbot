@@ -53,6 +53,108 @@ class HybridDetector:
 
         return swing_signal, positional_signal
 
+    def _classify_signal_type(self, df_daily: pd.DataFrame, df_15m: pd.DataFrame,
+                              signal: Dict, strategy: str) -> str:
+        """
+        Classify signal as MEAN_REVERSION, MOMENTUM, or BREAKOUT
+
+        Mean Reversion: Price pullback to support/EMA, oversold bounce
+        Momentum: Trend continuation, riding strong trends
+        Breakout: Breaking resistance, high volume surge
+        """
+        try:
+            latest = df_daily.iloc[-1]
+            price = latest['close']
+            prev = df_daily.iloc[-2]
+
+            # BREAKOUT signals (highest priority for classification)
+            # Criteria: Breaking above resistance with high volume
+            if 'resistance' in signal:
+                if price > signal['resistance'] * 1.005:  # Broke above resistance
+                    avg_volume = df_daily['volume'].tail(20).mean()
+                    if latest['volume'] > avg_volume * 1.5:
+                        return 'BREAKOUT'
+
+            # Check 20-day range breakout
+            if len(df_daily) >= 20:
+                high_20d = df_daily['high'].tail(20).max()
+                if price > high_20d * 0.998:  # At/near 20-day high
+                    avg_volume = df_daily['volume'].tail(20).mean()
+                    if latest['volume'] > avg_volume * 1.2:
+                        return 'BREAKOUT'
+
+            # MEAN REVERSION signals
+            # Criteria 1: Price at/near EMA support
+            if all(key in latest.index for key in ['ema_21', 'ema_50']):
+                ema_21 = latest['ema_21']
+                ema_50 = latest['ema_50']
+
+                # Price within 3% of EMA (at support)
+                if (0.97 < price / ema_21 < 1.03) or (0.97 < price / ema_50 < 1.03):
+                    # Check if coming from oversold
+                    if 'rsi' in latest.index and latest['rsi'] < 50:
+                        return 'MEAN_REVERSION'
+
+            # Criteria 2: RSI oversold bounce
+            if 'rsi' in latest.index:
+                rsi = latest['rsi']
+                if 30 < rsi < 45:  # Bouncing from oversold
+                    return 'MEAN_REVERSION'
+
+            # Criteria 3: Fibonacci retracement
+            if 'fibonacci_0.618' in signal:
+                fib_618 = signal['fibonacci_0.618']
+                if 0.98 < price / fib_618 < 1.02:  # At Fib 0.618
+                    return 'MEAN_REVERSION'
+
+            # Criteria 4: Recent pullback in uptrend
+            if len(df_daily) >= 10:
+                high_10d = df_daily['high'].tail(10).max()
+                pullback_pct = (high_10d / price - 1) * 100
+                if 3 < pullback_pct < 10:  # 3-10% pullback
+                    # But still in uptrend
+                    if 'ema_50' in latest.index and price > latest['ema_50']:
+                        return 'MEAN_REVERSION'
+
+            # MOMENTUM signals (default if not MR or BO)
+            # Criteria 1: Strong intraday momentum (for swing)
+            if df_15m is not None and len(df_15m) >= 10:
+                recent_15m = df_15m.tail(10)
+                close_change = (recent_15m['close'].iloc[-1] / recent_15m['close'].iloc[0] - 1) * 100
+                if close_change > 2.0:
+                    return 'MOMENTUM'
+
+            # Criteria 2: Price above all EMAs with momentum
+            if all(key in latest.index for key in ['ema_9', 'ema_21', 'ema_50']):
+                if (price > latest['ema_9'] and
+                    price > latest['ema_21'] and
+                    price > latest['ema_50']):
+                    price_change = (price / prev['close'] - 1) * 100
+                    if price_change > 1.0:  # Gaining >1%
+                        return 'MOMENTUM'
+
+            # Criteria 3: RSI trending up (50-70 range)
+            if 'rsi' in latest.index and 'rsi' in prev.index:
+                rsi = latest['rsi']
+                rsi_prev = prev['rsi']
+                if 50 < rsi < 75 and rsi > rsi_prev:
+                    return 'MOMENTUM'
+
+            # Default: Classify based on RSI
+            if 'rsi' in latest.index:
+                rsi = latest['rsi']
+                if rsi < 50:
+                    return 'MEAN_REVERSION'
+                else:
+                    return 'MOMENTUM'
+
+            # Fallback
+            return 'MOMENTUM'
+
+        except Exception as e:
+            print(f"⚠️  Error classifying signal type: {e}")
+            return 'MOMENTUM'  # Safe default
+
     def _is_swing_setup(self, df_daily: pd.DataFrame, df_15m: pd.DataFrame, signal: Dict) -> bool:
         """
         Detect swing trading setup
@@ -230,10 +332,14 @@ class HybridDetector:
         reward = target2 - entry_price
         risk_reward = reward / risk if risk > 0 else 0
 
+        # DYNAMIC ALLOCATOR: Classify signal type
+        signal_type = self._classify_signal_type(df_daily, df_15m, base_signal, 'swing')
+
         signal = {
             'symbol': symbol,
             'trade_type': '🔥 SWING TRADE',
             'strategy': 'swing',
+            'signal_type': signal_type,  # 'MEAN_REVERSION', 'MOMENTUM', or 'BREAKOUT'
             'entry_price': entry_price,
             'target1': target1,
             'target2': target2,
@@ -275,10 +381,14 @@ class HybridDetector:
         reward = target2 - entry_price
         risk_reward = reward / risk if risk > 0 else 0
 
+        # DYNAMIC ALLOCATOR: Classify signal type
+        signal_type = self._classify_signal_type(df_daily, None, base_signal, 'positional')
+
         signal = {
             'symbol': symbol,
             'trade_type': '📈 POSITIONAL TRADE',
             'strategy': 'positional',
+            'signal_type': signal_type,  # 'MEAN_REVERSION', 'MOMENTUM', or 'BREAKOUT'
             'entry_price': entry_price,
             'target1': target1,
             'target2': target2,

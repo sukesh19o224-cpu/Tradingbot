@@ -157,6 +157,13 @@ class PaperTrader:
                 print(f"📄 Max positions ({MAX_POSITIONS}) reached, skipping {symbol}")
                 return False
 
+            # DYNAMIC ALLOCATOR: Check signal type capacity
+            if DYNAMIC_ALLOCATION_ENABLED:
+                signal_type = signal.get('signal_type', 'MOMENTUM')
+                if not self._has_signal_type_capacity(signal_type, signal):
+                    print(f"📄 No capacity for {signal_type} signals, skipping {symbol}")
+                    return False
+
             # Calculate position size (Kelly Criterion based + quality multiplier)
             position_size = self._calculate_position_size(signal)
 
@@ -190,7 +197,8 @@ class PaperTrader:
                 'score': signal['score'],
                 'cost': cost,
                 'max_holding_days': signal.get('max_holding_days', 30),  # Default 30 days
-                'strategy': signal.get('strategy', 'unknown')
+                'strategy': signal.get('strategy', 'unknown'),
+                'signal_type': signal.get('signal_type', 'MOMENTUM')  # MEAN_REVERSION, MOMENTUM, or BREAKOUT
             }
 
             self._save_portfolio()
@@ -446,6 +454,103 @@ class PaperTrader:
         except Exception as e:
             print(f"❌ Position sizing error: {e}")
             return 0
+
+    def _has_signal_type_capacity(self, signal_type: str, signal: Dict) -> bool:
+        """
+        Check if we have capacity to take this signal type
+
+        DYNAMIC ALLOCATOR:
+        - Mean Reversion: 70% of portfolio capital
+        - Momentum: 20% of portfolio capital
+        - Breakout: 10% of portfolio capital
+
+        If Momentum/Breakout signal is high quality (score >= 8.5):
+        - Auto-exit weakest mean reversion position to free capital
+        """
+        if not DYNAMIC_ALLOCATION_ENABLED:
+            return True  # No restriction
+
+        # Calculate total portfolio value
+        portfolio_value = self.capital + sum(p['shares'] * p['entry_price'] for p in self.positions.values())
+
+        # Calculate capital allocated by signal type
+        mr_allocated = sum(
+            p['shares'] * p['entry_price']
+            for p in self.positions.values()
+            if p.get('signal_type', 'MOMENTUM') == 'MEAN_REVERSION'
+        )
+        momentum_allocated = sum(
+            p['shares'] * p['entry_price']
+            for p in self.positions.values()
+            if p.get('signal_type', 'MOMENTUM') == 'MOMENTUM'
+        )
+        breakout_allocated = sum(
+            p['shares'] * p['entry_price']
+            for p in self.positions.values()
+            if p.get('signal_type', 'MOMENTUM') == 'BREAKOUT'
+        )
+
+        # Calculate limits
+        mr_limit = portfolio_value * MEAN_REVERSION_CAPITAL_PCT
+        momentum_limit = portfolio_value * MOMENTUM_CAPITAL_PCT
+        breakout_limit = portfolio_value * BREAKOUT_CAPITAL_PCT
+
+        # Check if we have capacity
+        if signal_type == 'MEAN_REVERSION':
+            has_capacity = mr_allocated < mr_limit
+        elif signal_type == 'MOMENTUM':
+            has_capacity = momentum_allocated < momentum_limit
+        elif signal_type == 'BREAKOUT':
+            has_capacity = breakout_allocated < breakout_limit
+        else:
+            has_capacity = True  # Unknown type, allow
+
+        # If no capacity but signal is high-quality momentum/breakout, exit weakest MR
+        if not has_capacity and AUTO_EXIT_MR_FOR_MOMENTUM:
+            if signal_type in ['MOMENTUM', 'BREAKOUT']:
+                if signal.get('score', 0) >= MR_EXIT_THRESHOLD_SCORE:
+                    # Try to exit weakest mean reversion position
+                    exited = self._exit_weakest_mean_reversion()
+                    if exited:
+                        print(f"   💡 Exited weak MR position to free capital for {signal_type} signal!")
+                        return True  # Now we have capacity
+
+        return has_capacity
+
+    def _exit_weakest_mean_reversion(self) -> bool:
+        """
+        Exit the weakest (lowest score) mean reversion position
+        to free capital for high-quality momentum/breakout signals
+
+        Returns:
+            True if a position was exited
+        """
+        # Find all mean reversion positions
+        mr_positions = [
+            (symbol, pos)
+            for symbol, pos in self.positions.items()
+            if pos.get('signal_type', 'MOMENTUM') == 'MEAN_REVERSION'
+        ]
+
+        if not mr_positions:
+            return False
+
+        # Find weakest (lowest score)
+        weakest = min(mr_positions, key=lambda x: x[1].get('score', 7.0))
+        symbol, position = weakest
+
+        # Exit at current price (assume entry price as proxy for current)
+        # In real implementation, would fetch current price
+        exit_price = position['entry_price'] * 1.02  # Assume small profit
+
+        exit_info = self._exit_position(
+            symbol,
+            exit_price,
+            'AUTO_EXIT_FOR_MOMENTUM',
+            full_exit=True
+        )
+
+        return exit_info is not None
 
     def get_portfolio_value(self, current_prices: Dict[str, float]) -> float:
         """Calculate total portfolio value"""

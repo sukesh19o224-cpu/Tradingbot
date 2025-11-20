@@ -119,6 +119,17 @@ HIGH_QUALITY_SCORE = 8.5  # High quality signal threshold
 MAX_SWING_SIGNALS_PER_SCAN = 5  # Max swing signals to process per scan
 MAX_POSITIONAL_SIGNALS_PER_SCAN = 3  # Max positional signals to process per scan
 
+# Dynamic Capital Allocation (By Signal Type)
+# Allocates more to common signals (MR), reserves capacity for rare signals (Momentum/BO)
+DYNAMIC_ALLOCATION_ENABLED = True
+MEAN_REVERSION_CAPITAL_PCT = 0.70  # 70% capital for mean reversion (common)
+MOMENTUM_CAPITAL_PCT = 0.20  # 20% capital for momentum (less common)
+BREAKOUT_CAPITAL_PCT = 0.10  # 10% capital for breakout (rare but valuable)
+
+# Auto-exit mean reversion for high-quality momentum/breakout
+AUTO_EXIT_MR_FOR_MOMENTUM = True  # Exit MR positions to free capital for momentum
+MR_EXIT_THRESHOLD_SCORE = 8.5  # Only exit MR if momentum signal score >= 8.5
+
 # Signal Weights
 WEIGHTS = {
     'technical': 0.40,  # Technical indicators weight
