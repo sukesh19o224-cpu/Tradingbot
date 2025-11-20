@@ -33,13 +33,14 @@ class DataFetcher:
         self.cache_duration = timedelta(minutes=CACHE_DURATION_MINUTES)
 
     def get_stock_data(self, symbol: str, period: str = HISTORICAL_DATA_PERIOD,
-                      use_cache: bool = CACHE_ENABLED) -> Optional[pd.DataFrame]:
+                      interval: str = '1d', use_cache: bool = CACHE_ENABLED) -> Optional[pd.DataFrame]:
         """
         Fetch stock data with caching
 
         Args:
             symbol: Stock symbol (e.g., 'RELIANCE.NS')
             period: Data period ('1mo', '3mo', '6mo', '1y', etc.)
+            interval: Data interval ('1d', '15m', '5m', '1h', etc.)
             use_cache: Whether to use cached data
 
         Returns:
@@ -53,7 +54,7 @@ class DataFetcher:
                     return cached_data
 
             # Fetch from Yahoo Finance with retries
-            df = self._fetch_with_retry(symbol, period)
+            df = self._fetch_with_retry(symbol, period, interval)
 
             if df is not None and not df.empty:
                 # Save to cache
@@ -125,12 +126,12 @@ class DataFetcher:
 
         return results
 
-    def _fetch_with_retry(self, symbol: str, period: str, max_retries: int = MAX_API_RETRIES) -> Optional[pd.DataFrame]:
+    def _fetch_with_retry(self, symbol: str, period: str, interval: str = '1d', max_retries: int = MAX_API_RETRIES) -> Optional[pd.DataFrame]:
         """Fetch data with automatic retry on failure"""
         for attempt in range(max_retries):
             try:
                 ticker = yf.Ticker(symbol)
-                df = ticker.history(period=period)
+                df = ticker.history(period=period, interval=interval)
 
                 if not df.empty:
                     return df
