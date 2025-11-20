@@ -8,6 +8,7 @@ from datetime import datetime, time as dt_time
 import pytz
 from typing import List, Dict
 import argparse
+import yfinance as yf
 
 from config.settings import *
 from src.data.data_fetcher import DataFetcher
@@ -60,6 +61,10 @@ class TradingSystem:
         self.hybrid_scanner = HybridScanner(max_workers=optimal_threads)
 
         self.is_running = False
+
+        # Cache for NIFTY opening price (updated once per day at market open)
+        self.nifty_open_price = None
+        self.nifty_open_date = None
 
         print("✅ Hybrid System initialized successfully!")
         print(f"📊 Scanning Universe: {len(self.watchlist)} verified NSE stocks")
@@ -175,11 +180,9 @@ class TradingSystem:
         try:
             nifty_price = self.data_fetcher.get_current_price(NIFTY_SYMBOL)
             if nifty_price > 0:
-                # Get NIFTY's opening price (or previous close)
-                import yfinance as yf
-                nifty_data = yf.Ticker(NIFTY_SYMBOL).history(period='1d', interval='1d')
-                if not nifty_data.empty:
-                    nifty_open = nifty_data['Open'].iloc[-1]
+                # Get NIFTY's opening price (cached - fetched once per day)
+                nifty_open = self._get_nifty_open_price()
+                if nifty_open and nifty_open > 0:
                     nifty_change_pct = (nifty_price - nifty_open) / nifty_open
 
                     if nifty_change_pct <= MARKET_CRASH_THRESHOLD:
@@ -376,6 +379,35 @@ class TradingSystem:
         signals = self.run_scan()
         self.process_signals(signals)
         self.monitor_positions()
+
+    def _get_nifty_open_price(self) -> float:
+        """
+        Get NIFTY opening price (cached per day)
+
+        Fetches NIFTY opening price once per day and caches it.
+        This avoids repeated API calls during position monitoring.
+
+        Returns:
+            NIFTY opening price for current trading day, or None if unavailable
+        """
+        current_date = datetime.now(IST).date()
+
+        # Return cached value if available for today
+        if self.nifty_open_date == current_date and self.nifty_open_price:
+            return self.nifty_open_price
+
+        # Fetch fresh value (once per day)
+        try:
+            nifty_data = yf.Ticker(NIFTY_SYMBOL).history(period='1d', interval='1d')
+            if not nifty_data.empty:
+                self.nifty_open_price = nifty_data['Open'].iloc[-1]
+                self.nifty_open_date = current_date
+                print(f"   📊 NIFTY opening price cached: ₹{self.nifty_open_price:.2f}")
+                return self.nifty_open_price
+        except Exception as e:
+            print(f"   ⚠️ Error fetching NIFTY open price: {e}")
+
+        return None
 
     def _get_ist_time(self) -> str:
         """Get current time in IST"""
