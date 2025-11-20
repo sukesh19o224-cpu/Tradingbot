@@ -1,6 +1,6 @@
 """
-🚀 SUPER MATH TRADING SYSTEM - Main Application
-Automated signal generation with paper trading and Discord alerts
+🚀 SUPER MATH HYBRID TRADING SYSTEM - Main Application
+Dual strategy: Swing Trading + Positional Trading running simultaneously
 """
 
 import time
@@ -11,12 +11,12 @@ import argparse
 
 from config.settings import *
 from src.data.data_fetcher import DataFetcher
-from src.data.fast_scanner import FastScanner
+from src.data.hybrid_scanner import HybridScanner
 from src.data.eod_scanner import EODScanner
 from src.data.nse_stock_fetcher import NSEStockFetcher
 from src.strategies.signal_generator import SignalGenerator
 from src.strategies.multitimeframe_analyzer import MultiTimeframeAnalyzer
-from src.paper_trading.paper_trader import PaperTrader
+from src.paper_trading.dual_portfolio import DualPortfolio
 from src.alerts.discord_alerts import DiscordAlerts
 from src.comparison.portfolio_comparison import PortfolioComparison
 
@@ -25,23 +25,26 @@ IST = pytz.timezone('Asia/Kolkata')
 
 class TradingSystem:
     """
-    Main trading system orchestrator
+    Hybrid Trading System Orchestrator
 
-    Responsibilities:
-    - Scan stocks for signals
-    - Execute paper trades
-    - Monitor open positions
-    - Send Discord alerts
-    - Manage daily operations
+    Manages BOTH swing and positional trading simultaneously:
+    - Scans ALL stocks for opportunities
+    - Detects swing setups → Swing portfolio
+    - Detects positional setups → Positional portfolio
+    - Never misses opportunities!
     """
 
-    def __init__(self, enable_comparison=False, use_eod_stocks=True, eod_tier='tier1'):
-        print("🚀 Initializing Super Math Trading System...")
+    def __init__(self, enable_comparison=False):
+        print("🚀 Initializing HYBRID Trading System...")
+        print("   🔥 Swing Trading + 📈 Positional Trading")
 
         self.data_fetcher = DataFetcher()
-        self.fast_scanner = FastScanner(max_workers=10)  # Multi-threaded scanner
+        self.hybrid_scanner = HybridScanner(max_workers=10)  # Multi-threaded hybrid scanner
         self.signal_generator = SignalGenerator()
-        self.paper_trader = PaperTrader()
+
+        # DUAL PORTFOLIO SYSTEM (60% swing, 40% positional)
+        self.dual_portfolio = DualPortfolio(total_capital=INITIAL_CAPITAL)
+
         self.discord = DiscordAlerts()
 
         # EOD scanner and multi-timeframe analyzer
@@ -53,102 +56,97 @@ class TradingSystem:
         self.enable_comparison = enable_comparison
         self.portfolio_comparison = PortfolioComparison() if enable_comparison else None
 
-        # Try to load top stocks from EOD scan (with tier selection)
-        self.eod_tier = eod_tier  # Store for later use
-        if use_eod_stocks:
-            eod_stocks = self.eod_scanner.get_top_stocks_for_today(tier=eod_tier)
-            if eod_stocks:
-                self.watchlist = eod_stocks
-                tier_names = {
-                    'tier1': 'TIER 1 - TOP 50 (Swing Trading)',
-                    'tier2': 'TIER 2 - TOP 100 (Swing + Positional)',
-                    'tier3': 'TIER 3 - TOP 250 (Positional)',
-                    'tier4': 'TIER 4 - TOP 500 (All Viable)',
-                    'all': 'ALL TIERS'
-                }
-                tier_name = tier_names.get(eod_tier, eod_tier.upper())
-                print(f"📊 Using EOD scan: {tier_name}")
-                print(f"   • {len(self.watchlist)} stocks loaded")
-            else:
-                self.watchlist = DEFAULT_WATCHLIST
-                print(f"⚠️  No EOD scan found, using default watchlist")
-        else:
-            self.watchlist = DEFAULT_WATCHLIST
+        # Scan ALL verified NSE stocks (no tier selection needed!)
+        self.watchlist = self.nse_fetcher.fetch_nse_stocks()
 
         self.is_running = False
 
-        print("✅ System initialized successfully!")
-        print(f"📊 Monitoring {len(self.watchlist)} stocks")
-        print(f"⚡ Multi-threaded scanning: ENABLED (10x faster)")
-        print(f"⚡ Multi-timeframe analysis: ENABLED (Daily + 15-minute)")
-        print(f"💰 Paper Trading Capital: ₹{self.paper_trader.capital:,.0f}")
+        print("✅ Hybrid System initialized successfully!")
+        print(f"📊 Scanning Universe: {len(self.watchlist)} verified NSE stocks")
+        print(f"⚡ Hybrid Scanner: ENABLED (swing + positional detection)")
+        print(f"⚡ Multi-threaded: 10 parallel workers")
+        print(f"⚡ Multi-timeframe: Daily + 15-minute candles")
+        print(f"💼 Dual Portfolio System:")
+        print(f"   🔥 Swing Portfolio: ₹{INITIAL_CAPITAL * 0.60:,.0f} (60%)")
+        print(f"   📈 Positional Portfolio: ₹{INITIAL_CAPITAL * 0.40:,.0f} (40%)")
+        print(f"   💰 Total Capital: ₹{INITIAL_CAPITAL:,.0f}")
         print(f"📱 Discord Alerts: {'Enabled' if self.discord.enabled else 'Disabled'}")
         if enable_comparison:
             print(f"🎯 Portfolio Comparison: ENABLED (3 strategies)")
             print(f"   📊 A: EXCELLENT (≥8.5) | B: MODERATE (≥8.0) | C: ALL (≥7.0)")
 
-    def run_scan(self) -> List[Dict]:
+    def run_scan(self) -> Dict:
         """
-        Run complete stock scan and generate signals (Multi-threaded)
+        Run hybrid scan - detects BOTH swing and positional opportunities
 
         Returns:
-            List of signal dictionaries
+            Dict with 'swing_signals' and 'positional_signals'
         """
         print("\n" + "="*70)
-        print(f"🔍 FAST MULTI-THREADED STOCK SCAN")
+        print(f"🎯 HYBRID SCAN - Swing + Positional Detection")
         print(f"⏰ {self._get_ist_time()}")
         print("="*70)
 
-        # Use fast scanner (multi-threaded)
-        result = self.fast_scanner.scan_all_stocks(self.watchlist)
+        # Use hybrid scanner (detects both types)
+        result = self.hybrid_scanner.scan_all_stocks(self.watchlist)
 
-        signals = result['signals']
+        swing_signals = result['swing_signals']
+        positional_signals = result['positional_signals']
         stats = result['stats']
 
-        # Display top signals
-        if signals:
-            print(f"🎯 TOP SIGNALS:")
-            for i, signal in enumerate(signals[:5], 1):
-                print(f"\n{i}. {signal['symbol']} - Score: {signal['score']}/10 ({signal['trade_type']})")
-                print(f"   Entry: ₹{signal['entry_price']:.2f}")
-                print(f"   Target 2: ₹{signal['target2']:.2f} (+{((signal['target2']/signal['entry_price']-1)*100):.1f}%)")
-                print(f"   Stop: ₹{signal['stop_loss']:.2f} | R:R: {signal['risk_reward_ratio']:.1f}:1")
-                print(f"   ML Prediction: {signal['predicted_return']:+.1f}% ({signal['ml_confidence']*100:.0f}% confidence)")
-        else:
-            print(f"\n⚠️ No signals found (Try lowering MIN_SIGNAL_SCORE in config/settings.py)")
+        return {
+            'swing_signals': swing_signals,
+            'positional_signals': positional_signals,
+            'stats': stats
+        }
 
-        return signals
-
-    def process_signals(self, signals: List[Dict]):
+    def process_signals(self, scan_result: Dict):
         """
-        Process signals: execute paper trades and send alerts
+        Process BOTH swing and positional signals
 
         Args:
-            signals: List of signal dictionaries
+            scan_result: Dict with 'swing_signals' and 'positional_signals'
         """
-        if not signals:
+        swing_signals = scan_result.get('swing_signals', [])
+        positional_signals = scan_result.get('positional_signals', [])
+
+        if not swing_signals and not positional_signals:
             print("\n⚠️ No signals to process")
             return
 
-        print(f"\n📋 Processing {len(signals)} signals...")
+        print(f"\n📋 Processing Signals...")
+        print(f"   🔥 Swing: {len(swing_signals)} signals")
+        print(f"   📈 Positional: {len(positional_signals)} signals")
 
-        for signal in signals:
+        # Process swing signals → Swing portfolio
+        for signal in swing_signals:
             symbol = signal['symbol']
 
-            # Execute paper trade
             if PAPER_TRADING_AUTO_EXECUTE:
-                executed = self.paper_trader.execute_signal(signal)
+                executed = self.dual_portfolio.execute_swing_signal(signal)
 
                 if executed:
-                    # Send Discord alert
+                    # Send Discord alert (swing trade)
                     if self.discord.enabled:
-                        self.discord.send_buy_signal(signal, paper_trade=True)
+                        self.discord.send_swing_signal(signal)
+                    print(f"   🔥 Swing: {symbol} executed")
                 else:
-                    print(f"⏭️ Skipped {symbol} (already holding or insufficient capital)")
+                    print(f"   ⏭️ Swing: {symbol} skipped (already holding or insufficient capital)")
 
-            # Route to portfolio comparison (if enabled)
-            if self.enable_comparison and self.portfolio_comparison:
-                self.portfolio_comparison.process_signal(signal)
+        # Process positional signals → Positional portfolio
+        for signal in positional_signals:
+            symbol = signal['symbol']
+
+            if PAPER_TRADING_AUTO_EXECUTE:
+                executed = self.dual_portfolio.execute_positional_signal(signal)
+
+                if executed:
+                    # Send Discord alert (positional trade)
+                    if self.discord.enabled:
+                        self.discord.send_positional_signal(signal)
+                    print(f"   📈 Positional: {symbol} executed")
+                else:
+                    print(f"   ⏭️ Positional: {symbol} skipped (already holding or insufficient capital)")
 
         print("\n✅ Signal processing complete")
 
