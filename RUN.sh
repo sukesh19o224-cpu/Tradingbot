@@ -3,6 +3,13 @@
 # 🚀 MAIN RUN SCRIPT - Super Math Trading System
 # Simple interface to run your trading system
 
+# Activate virtual environment if it exists
+if [ -d "venv" ]; then
+    source venv/bin/activate
+elif [ -d ".venv" ]; then
+    source .venv/bin/activate
+fi
+
 show_menu() {
     echo ""
     echo "╔══════════════════════════════════════════════════════════╗"

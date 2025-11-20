@@ -1,6 +1,13 @@
 @echo off
 REM 🚀 MAIN RUN SCRIPT - Super Math Trading System (Windows)
 
+REM Activate virtual environment if it exists
+if exist venv\Scripts\activate.bat (
+    call venv\Scripts\activate.bat
+) else if exist .venv\Scripts\activate.bat (
+    call .venv\Scripts\activate.bat
+)
+
 if "%1"=="once" goto run_single_scan
 if "%1"=="scan" goto run_single_scan
 if "%1"=="live" goto run_live_mode
