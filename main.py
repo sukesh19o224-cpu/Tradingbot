@@ -12,7 +12,6 @@ import argparse
 from config.settings import *
 from src.data.data_fetcher import DataFetcher
 from src.data.hybrid_scanner import HybridScanner
-from src.data.eod_scanner import EODScanner
 from src.data.nse_stock_fetcher import NSEStockFetcher
 from src.strategies.signal_generator import SignalGenerator
 from src.strategies.multitimeframe_analyzer import MultiTimeframeAnalyzer
@@ -38,7 +37,7 @@ class TradingSystem:
         print("   🔥 Swing Trading + 📈 Positional Trading")
 
         self.data_fetcher = DataFetcher()
-        self.hybrid_scanner = HybridScanner(max_workers=10)  # Multi-threaded hybrid scanner
+        self.hybrid_scanner = HybridScanner(max_workers=30)  # 30 parallel threads for fast scanning
         self.signal_generator = SignalGenerator()
 
         # DUAL PORTFOLIO SYSTEM (60% swing, 40% positional)
@@ -46,8 +45,7 @@ class TradingSystem:
 
         self.discord = DiscordAlerts()
 
-        # EOD scanner and multi-timeframe analyzer
-        self.eod_scanner = EODScanner(max_workers=20)
+        # Multi-timeframe analyzer and NSE stock fetcher
         self.mtf_analyzer = MultiTimeframeAnalyzer()
         self.nse_fetcher = NSEStockFetcher()
 
@@ -372,47 +370,6 @@ class TradingSystem:
         self.process_signals(signals)
         self.monitor_positions()
 
-    def run_eod_scan(self, top_n: int = 100, auto: bool = False):
-        """
-        Run End-of-Day scan on all NSE stocks
-
-        This should be run after market close (3:30 PM IST)
-        Scans all NSE stocks and saves top N for next day's live scanning
-
-        Args:
-            top_n: Number of top stocks to save for tomorrow
-            auto: If True, skip confirmation prompt (for automatic runs)
-        """
-        print("\n" + "="*70)
-        print("🌙 END-OF-DAY SCANNER")
-        print("="*70)
-        print(f"⏰ Best time to run: After 3:30 PM IST (market close)")
-        print(f"📊 Will scan: ALL NSE stocks (~600-800 verified stocks)")
-        print(f"⏱️  Expected time: 5-10 minutes")
-        print(f"💾 Will save: Top {top_n} stocks ranked in 4 tiers")
-        print("="*70)
-
-        # Confirm (skip if automatic)
-        if not auto:
-            print("\nThis will scan all NSE stocks and may take some time.")
-            response = input("Continue? (y/n) [default: y]: ").strip().lower() or 'y'
-
-            if response != 'y':
-                print("❌ EOD scan cancelled")
-                return
-
-        # Run EOD scan
-        results = self.eod_scanner.run_eod_scan(top_n=top_n)
-
-        print("\n" + "="*70)
-        print("✅ EOD SCAN COMPLETE!")
-        print("="*70)
-        print(f"📊 Results saved to: data/eod_scan_results.json")
-        print(f"🚀 Tomorrow's live scan will use these {top_n} stocks")
-        print("="*70)
-
-        return results
-
     def _get_ist_time(self) -> str:
         """Get current time in IST"""
         return datetime.now(IST).strftime('%d %b %Y, %I:%M %p IST')
@@ -421,14 +378,12 @@ class TradingSystem:
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(description='Hybrid Trading System - Swing + Positional')
-    parser.add_argument('--mode', choices=['once', 'continuous', 'eod'],
-                       default='once', help='Run mode')
+    parser.add_argument('--mode', choices=['once', 'continuous'],
+                       default='once', help='Run mode (once=single scan, continuous=live trading)')
     parser.add_argument('--test-discord', action='store_true',
                        help='Test Discord connection')
     parser.add_argument('--summary', action='store_true',
                        help='Show dual portfolio summary')
-    parser.add_argument('--eod-top-n', type=int, default=100,
-                       help='Number of top stocks to save from EOD scan (default: 100)')
 
     args = parser.parse_args()
 
@@ -443,13 +398,6 @@ def main():
     if args.summary:
         dual_portfolio = DualPortfolio()
         dual_portfolio.print_summary()
-        return
-
-    # EOD Scan mode
-    if args.mode == 'eod':
-        print("\n🌙 End-of-Day Scanner Mode")
-        system = TradingSystem()
-        system.run_eod_scan(top_n=args.eod_top_n)
         return
 
     # Initialize hybrid system

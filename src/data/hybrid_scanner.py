@@ -25,7 +25,15 @@ class HybridScanner:
     - Can be both, one, or neither
     """
 
-    def __init__(self, max_workers: int = 10):
+    def __init__(self, max_workers: int = 30):
+        """
+        Initialize hybrid scanner
+
+        Args:
+            max_workers: Number of parallel threads (default 30 for fast scanning)
+                        30 threads can scan ~600 stocks in ~2 minutes
+                        Increase to 50 for scanning 1000+ stocks
+        """
         self.data_fetcher = DataFetcher()
         self.signal_generator = SignalGenerator()
         self.hybrid_detector = HybridDetector()
