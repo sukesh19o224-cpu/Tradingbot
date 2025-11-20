@@ -37,7 +37,6 @@ class TradingSystem:
         print("   🔥 Swing Trading + 📈 Positional Trading")
 
         self.data_fetcher = DataFetcher()
-        self.hybrid_scanner = HybridScanner(max_workers=30)  # 30 parallel threads for fast scanning
         self.signal_generator = SignalGenerator()
 
         # DUAL PORTFOLIO SYSTEM (60% swing, 40% positional)
@@ -52,12 +51,20 @@ class TradingSystem:
         # Scan ALL verified NSE stocks (no tier selection needed!)
         self.watchlist = self.nse_fetcher.fetch_nse_stocks()
 
+        # Auto-adjust threads based on stock count for optimal performance
+        # 300 stocks: 30 threads (~1 min scan)
+        # 600 stocks: 30 threads (~2 min scan)
+        # 1000 stocks: 50 threads (~2.5 min scan)
+        # 1500+ stocks: 50 threads (~3-4 min scan)
+        optimal_threads = 30 if len(self.watchlist) < 1000 else 50
+        self.hybrid_scanner = HybridScanner(max_workers=optimal_threads)
+
         self.is_running = False
 
         print("✅ Hybrid System initialized successfully!")
         print(f"📊 Scanning Universe: {len(self.watchlist)} verified NSE stocks")
         print(f"⚡ Hybrid Scanner: ENABLED (swing + positional detection)")
-        print(f"⚡ Multi-threaded: 10 parallel workers")
+        print(f"⚡ Multi-threaded: {optimal_threads} parallel workers")
         print(f"⚡ Multi-timeframe: Daily + 15-minute candles")
         print(f"💼 Dual Portfolio System:")
         print(f"   🔥 Swing Portfolio: ₹{INITIAL_CAPITAL * 0.60:,.0f} (60%)")

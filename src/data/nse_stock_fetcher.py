@@ -18,13 +18,41 @@ class NSEStockFetcher:
     """
     Fetches complete NSE stock list using verified symbols
 
-    Uses pre-verified stock list from config/nse_verified_stocks.py
+    Priority:
+    1. If data/nse_all_stocks.json exists → Use that (full NSE list)
+    2. Otherwise → Use config/nse_verified_stocks.py (curated 283 stocks)
+
     All symbols are tested to work on Yahoo Finance
     """
 
     def __init__(self):
-        self.cache_file = 'data/nse_stock_list.json'
-        self.stocks = ALL_VERIFIED_STOCKS
+        self.all_stocks_file = 'data/nse_all_stocks.json'
+        self.stocks = self._load_stocks()
+
+    def _load_stocks(self) -> List[str]:
+        """
+        Load stock list with priority:
+        1. From data/nse_all_stocks.json (if exists)
+        2. From config/nse_verified_stocks.py (fallback)
+        """
+        # Try to load from full NSE list JSON file
+        if os.path.exists(self.all_stocks_file):
+            try:
+                with open(self.all_stocks_file, 'r') as f:
+                    data = json.load(f)
+                    stocks = data.get('stocks', [])
+                    if stocks:
+                        print(f"📊 Loaded FULL NSE stock list from {self.all_stocks_file}")
+                        print(f"   ✅ Total stocks: {len(stocks)}")
+                        print(f"   📅 Last updated: {data.get('last_updated', 'Unknown')}")
+                        return stocks
+            except Exception as e:
+                print(f"⚠️ Error loading {self.all_stocks_file}: {e}")
+                print(f"   Falling back to verified stocks...")
+
+        # Fallback to verified stocks from config
+        print(f"📊 Using curated verified stock list from config")
+        return ALL_VERIFIED_STOCKS
 
     def fetch_nse_stocks(self) -> List[str]:
         """
@@ -33,11 +61,16 @@ class NSEStockFetcher:
         Returns:
             List of NSE stock symbols in Yahoo Finance format (SYMBOL.NS)
         """
-        print(f"📊 Loading verified NSE stock list...")
         print(f"   ✅ Loaded {len(self.stocks)} verified NSE stocks")
         print(f"   • All symbols tested working on Yahoo Finance")
-        print(f"   • Coverage: NIFTY 50, Next 50, Midcap 100, Smallcap 100")
-        print(f"   • Sectors: Banking, IT, Pharma, Auto, FMCG, Metal, Energy, Infra, Realty")
+
+        if len(self.stocks) < 500:
+            print(f"   • Coverage: NIFTY 50, Next 50, Midcap 100, Smallcap 100")
+            print(f"   • Sectors: Banking, IT, Pharma, Auto, FMCG, Metal, Energy, Infra, Realty")
+            print(f"   💡 To get FULL NSE list (~1500-2000 stocks): python scripts/fetch_all_nse_stocks.py")
+        else:
+            print(f"   • Coverage: FULL NSE equity list")
+            print(f"   • All actively traded stocks included")
 
         return self.stocks
 
