@@ -21,14 +21,15 @@ show_menu() {
     echo ""
     echo "  1) 🎯 Single Scan           - Run one hybrid scan"
     echo "  2) 🔥 HYBRID Mode           - Swing + Positional! (RECOMMENDED)"
-    echo "  3) 🌙 EOD Scanner           - Manual EOD scan (for testing)"
-    echo "  4) 📊 GUI Dashboard         - Live Portfolio Dashboard (NEW!)"
-    echo "  5) 📈 Show Summary          - View dual portfolio performance"
-    echo "  6) 🧪 Test Discord          - Test Discord alerts"
-    echo "  7) ❌ Exit"
+    echo "  3) 📊 GUI Dashboard         - Live Portfolio Dashboard"
+    echo "  4) 📈 Show Summary          - View dual portfolio performance"
+    echo "  5) 🧪 Test Discord          - Test Discord alerts"
+    echo "  6) ❌ Exit"
     echo ""
     echo "💡 HYBRID Mode: Swing + Positional simultaneously"
-    echo "   • Scans ALL 800 stocks • Never misses opportunities!"
+    echo "   • Scans ALL stocks every 5 minutes during market hours"
+    echo "   • Monitors positions every 3 minutes"
+    echo "   • Never misses opportunities!"
     echo "💡 GUI Dashboard: Beautiful live portfolio viewer!"
     echo ""
 }
@@ -72,55 +73,6 @@ run_live_mode() {
     python3 main.py --mode continuous
 }
 
-run_eod_scan() {
-    echo ""
-    echo "╔══════════════════════════════════════════════════════════╗"
-    echo "║     🌙 END-OF-DAY SCANNER                               ║"
-    echo "╚══════════════════════════════════════════════════════════╝"
-    echo ""
-    echo "⏰ Best time: After 3:30 PM IST (market close)"
-    echo "📊 Scans: ALL NSE verified stocks (~600-800 stocks)"
-    echo "⏱️  Time needed: 5-10 minutes"
-    echo ""
-    echo "📈 This scan ranks all NSE stocks by signal quality"
-    echo "   Results saved in 4 TIERS for different trading styles:"
-    echo "   • TIER 1: Top 50  (Swing trading - aggressive)"
-    echo "   • TIER 2: Top 100 (Swing + positional - balanced)"
-    echo "   • TIER 3: Top 250 (Positional - medium-term)"
-    echo "   • TIER 4: Top 500 (All viable - conservative)"
-    echo ""
-    echo "💡 Note: In automatic mode, EOD scan runs automatically at 4 PM"
-    echo "   This manual option is for testing or re-running scans"
-    echo ""
-    echo "How many top stocks to rank?"
-    echo "  1) Top 250 (faster - good for testing)"
-    echo "  2) Top 500 (recommended - full ranking)"
-    echo "  3) Top 750 (comprehensive)"
-    echo ""
-    read -p "Enter choice (1-3) [default: 2]: " eod_choice
-    eod_choice=${eod_choice:-2}
-
-    case $eod_choice in
-        1)
-            top_n=250
-            ;;
-        2)
-            top_n=500
-            ;;
-        3)
-            top_n=750
-            ;;
-        *)
-            top_n=500
-            ;;
-    esac
-
-    echo ""
-    echo "🚀 Starting EOD scan (top $top_n stocks in 4 tiers)..."
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo ""
-    python3 main.py --mode eod --eod-top-n $top_n
-}
 
 run_gui_dashboard() {
     echo ""
@@ -241,9 +193,6 @@ case "$1" in
     live|continuous)
         run_live_mode
         ;;
-    eod)
-        run_eod_scan
-        ;;
     gui)
         run_gui_dashboard
         ;;
@@ -257,7 +206,7 @@ case "$1" in
         # Interactive menu
         while true; do
             show_menu
-            read -p "Enter choice (1-7): " choice
+            read -p "Enter choice (1-6): " choice
 
             case $choice in
                 1)
@@ -269,26 +218,21 @@ case "$1" in
                     run_live_mode
                     ;;
                 3)
-                    run_eod_scan
-                    echo ""
-                    read -p "Press Enter to continue..."
-                    ;;
-                4)
                     run_gui_dashboard
                     echo ""
                     read -p "Press Enter to continue..."
                     ;;
-                5)
+                4)
                     show_summary
                     echo ""
                     read -p "Press Enter to continue..."
                     ;;
-                6)
+                5)
                     test_discord
                     echo ""
                     read -p "Press Enter to continue..."
                     ;;
-                7)
+                6)
                     echo ""
                     echo "👋 Goodbye!"
                     echo ""
@@ -296,7 +240,7 @@ case "$1" in
                     ;;
                 *)
                     echo ""
-                    echo "❌ Invalid choice. Please enter 1-7."
+                    echo "❌ Invalid choice. Please enter 1-6."
                     sleep 2
                     ;;
             esac
