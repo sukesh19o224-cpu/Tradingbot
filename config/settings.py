@@ -231,17 +231,37 @@ MAX_API_RETRIES = 3
 API_TIMEOUT_SECONDS = 30
 
 # ═══════════════════════════════════════════════════════════════
-# 📋 STOCK WATCHLIST (Top NSE Stocks)
+# 📋 STOCK WATCHLIST - COMPREHENSIVE MARKET COVERAGE
 # ═══════════════════════════════════════════════════════════════
 
-DEFAULT_WATCHLIST = [
-    'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS', 'INFY.NS', 'HINDUNILVR.NS',
-    'ICICIBANK.NS', 'KOTAKBANK.NS', 'SBIN.NS', 'BAJFINANCE.NS', 'BHARTIARTL.NS',
-    'ITC.NS', 'ASIANPAINT.NS', 'AXISBANK.NS', 'LT.NS', 'DMART.NS',
-    'SUNPHARMA.NS', 'TITAN.NS', 'ULTRACEMCO.NS', 'NESTLEIND.NS', 'WIPRO.NS',
-    'MARUTI.NS', 'HCLTECH.NS', 'M&M.NS', 'NTPC.NS', 'POWERGRID.NS',
-    'TATASTEEL.NS', 'INDUSINDBK.NS', 'ADANIPORTS.NS', 'ONGC.NS', 'TECHM.NS'
-]
+# Import comprehensive stock lists
+from config.nse_universe import (
+    NIFTY_200,
+    HIGH_VOLUME_MIDCAPS,
+    WATCHLIST_CONSERVATIVE,
+    WATCHLIST_MODERATE,
+    WATCHLIST_AGGRESSIVE,
+    WATCHLIST_ULTRA
+)
+
+# ═══════════════════════════════════════════════════════════════
+# 🎯 SELECT YOUR SCAN MODE:
+# ═══════════════════════════════════════════════════════════════
+# Choose based on your needs and scan time tolerance:
+#
+# CONSERVATIVE:  50 stocks  (~1-2 min)  - Top quality only
+# MODERATE:     100 stocks  (~2-4 min)  - Good balance
+# AGGRESSIVE:   200 stocks  (~4-6 min)  - Maximum opportunities ✅
+# ULTRA:        300+ stocks (~8-12 min) - Everything
+# ═══════════════════════════════════════════════════════════════
+
+# ✅ RECOMMENDED: Aggressive mode (200 stocks from NIFTY 200)
+DEFAULT_WATCHLIST = WATCHLIST_AGGRESSIVE
+
+# Uncomment one of these to change:
+# DEFAULT_WATCHLIST = WATCHLIST_CONSERVATIVE  # 50 stocks
+# DEFAULT_WATCHLIST = WATCHLIST_MODERATE      # 100 stocks
+# DEFAULT_WATCHLIST = WATCHLIST_ULTRA         # 300+ stocks
 
 # Sector Classification
 SECTORS = {

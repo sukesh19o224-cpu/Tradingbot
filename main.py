@@ -11,6 +11,7 @@ import argparse
 
 from config.settings import *
 from src.data.data_fetcher import DataFetcher
+from src.data.fast_scanner import FastScanner
 from src.strategies.signal_generator import SignalGenerator
 from src.paper_trading.paper_trader import PaperTrader
 from src.alerts.discord_alerts import DiscordAlerts
@@ -34,6 +35,7 @@ class TradingSystem:
         print("🚀 Initializing Super Math Trading System...")
 
         self.data_fetcher = DataFetcher()
+        self.fast_scanner = FastScanner(max_workers=10)  # Multi-threaded scanner
         self.signal_generator = SignalGenerator()
         self.paper_trader = PaperTrader()
         self.discord = DiscordAlerts()
@@ -43,53 +45,39 @@ class TradingSystem:
 
         print("✅ System initialized successfully!")
         print(f"📊 Monitoring {len(self.watchlist)} stocks")
+        print(f"⚡ Multi-threaded scanning: ENABLED (10x faster)")
         print(f"💰 Paper Trading Capital: ₹{self.paper_trader.capital:,.0f}")
         print(f"📱 Discord Alerts: {'Enabled' if self.discord.enabled else 'Disabled'}")
 
     def run_scan(self) -> List[Dict]:
         """
-        Run complete stock scan and generate signals
+        Run complete stock scan and generate signals (Multi-threaded)
 
         Returns:
             List of signal dictionaries
         """
-        print("\n" + "="*60)
-        print(f"🔍 SCANNING {len(self.watchlist)} STOCKS")
+        print("\n" + "="*70)
+        print(f"🔍 FAST MULTI-THREADED STOCK SCAN")
         print(f"⏰ {self._get_ist_time()}")
-        print("="*60)
+        print("="*70)
 
-        # Fetch data for all stocks
-        print("\n📡 Fetching market data...")
-        stock_data = self.data_fetcher.get_multiple_stocks(
-            self.watchlist,
-            period=HISTORICAL_DATA_PERIOD
-        )
+        # Use fast scanner (multi-threaded)
+        result = self.fast_scanner.scan_all_stocks(self.watchlist)
 
-        if not stock_data:
-            print("❌ No data fetched. Check internet connection.")
-            return []
+        signals = result['signals']
+        stats = result['stats']
 
-        # Generate signals
-        print(f"\n⚡ Generating signals (min score: {MIN_SIGNAL_SCORE}/10)...")
-        signals = self.signal_generator.scan_multiple_stocks(
-            list(stock_data.keys()),
-            stock_data
-        )
-
-        # Display results
-        print(f"\n{'='*60}")
-        print(f"✅ SCAN COMPLETE - Found {len(signals)} signals")
-        print(f"{'='*60}")
-
+        # Display top signals
         if signals:
-            print(f"\n🎯 TOP SIGNALS:")
+            print(f"🎯 TOP SIGNALS:")
             for i, signal in enumerate(signals[:5], 1):
-                print(f"\n{i}. {signal['symbol']} - Score: {signal['score']}/10")
-                print(f"   Type: {signal['trade_type']}")
+                print(f"\n{i}. {signal['symbol']} - Score: {signal['score']}/10 ({signal['trade_type']})")
                 print(f"   Entry: ₹{signal['entry_price']:.2f}")
                 print(f"   Target 2: ₹{signal['target2']:.2f} (+{((signal['target2']/signal['entry_price']-1)*100):.1f}%)")
-                print(f"   Stop: ₹{signal['stop_loss']:.2f}")
-                print(f"   R:R: {signal['risk_reward_ratio']:.1f}:1")
+                print(f"   Stop: ₹{signal['stop_loss']:.2f} | R:R: {signal['risk_reward_ratio']:.1f}:1")
+                print(f"   ML Prediction: {signal['predicted_return']:+.1f}% ({signal['ml_confidence']*100:.0f}% confidence)")
+        else:
+            print(f"\n⚠️ No signals found (Try lowering MIN_SIGNAL_SCORE in config/settings.py)")
 
         return signals
 
