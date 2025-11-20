@@ -12,7 +12,10 @@ import argparse
 from config.settings import *
 from src.data.data_fetcher import DataFetcher
 from src.data.fast_scanner import FastScanner
+from src.data.eod_scanner import EODScanner
+from src.data.nse_stock_fetcher import NSEStockFetcher
 from src.strategies.signal_generator import SignalGenerator
+from src.strategies.multitimeframe_analyzer import MultiTimeframeAnalyzer
 from src.paper_trading.paper_trader import PaperTrader
 from src.alerts.discord_alerts import DiscordAlerts
 from src.comparison.portfolio_comparison import PortfolioComparison
@@ -32,7 +35,7 @@ class TradingSystem:
     - Manage daily operations
     """
 
-    def __init__(self, enable_comparison=False):
+    def __init__(self, enable_comparison=False, use_eod_stocks=True):
         print("🚀 Initializing Super Math Trading System...")
 
         self.data_fetcher = DataFetcher()
@@ -41,16 +44,33 @@ class TradingSystem:
         self.paper_trader = PaperTrader()
         self.discord = DiscordAlerts()
 
+        # EOD scanner and multi-timeframe analyzer
+        self.eod_scanner = EODScanner(max_workers=20)
+        self.mtf_analyzer = MultiTimeframeAnalyzer()
+        self.nse_fetcher = NSEStockFetcher()
+
         # Portfolio comparison (for live strategy testing)
         self.enable_comparison = enable_comparison
         self.portfolio_comparison = PortfolioComparison() if enable_comparison else None
 
-        self.watchlist = DEFAULT_WATCHLIST
+        # Try to load top stocks from EOD scan
+        if use_eod_stocks:
+            eod_stocks = self.eod_scanner.get_top_stocks_for_today()
+            if eod_stocks:
+                self.watchlist = eod_stocks
+                print(f"📊 Using EOD scan results: {len(self.watchlist)} top stocks")
+            else:
+                self.watchlist = DEFAULT_WATCHLIST
+                print(f"⚠️  No EOD scan found, using default watchlist")
+        else:
+            self.watchlist = DEFAULT_WATCHLIST
+
         self.is_running = False
 
         print("✅ System initialized successfully!")
         print(f"📊 Monitoring {len(self.watchlist)} stocks")
         print(f"⚡ Multi-threaded scanning: ENABLED (10x faster)")
+        print(f"⚡ Multi-timeframe analysis: ENABLED (Daily + 15-minute)")
         print(f"💰 Paper Trading Capital: ₹{self.paper_trader.capital:,.0f}")
         print(f"📱 Discord Alerts: {'Enabled' if self.discord.enabled else 'Disabled'}")
         if enable_comparison:
@@ -285,6 +305,45 @@ class TradingSystem:
         self.process_signals(signals)
         self.monitor_positions()
 
+    def run_eod_scan(self, top_n: int = 100):
+        """
+        Run End-of-Day scan on all NSE stocks
+
+        This should be run after market close (3:30 PM IST)
+        Scans all NSE stocks and saves top N for next day's live scanning
+
+        Args:
+            top_n: Number of top stocks to save for tomorrow
+        """
+        print("\n" + "="*70)
+        print("🌙 END-OF-DAY SCANNER")
+        print("="*70)
+        print(f"⏰ Best time to run: After 3:30 PM IST (market close)")
+        print(f"📊 Will scan: ALL NSE stocks (~500 stocks)")
+        print(f"⏱️  Expected time: 5-10 minutes")
+        print(f"💾 Will save: Top {top_n} stocks for tomorrow")
+        print("="*70)
+
+        # Confirm
+        print("\nThis will scan all NSE stocks and may take some time.")
+        response = input("Continue? (y/n) [default: y]: ").strip().lower() or 'y'
+
+        if response != 'y':
+            print("❌ EOD scan cancelled")
+            return
+
+        # Run EOD scan
+        results = self.eod_scanner.run_eod_scan(top_n=top_n)
+
+        print("\n" + "="*70)
+        print("✅ EOD SCAN COMPLETE!")
+        print("="*70)
+        print(f"📊 Results saved to: data/eod_scan_results.json")
+        print(f"🚀 Tomorrow's live scan will use these {top_n} stocks")
+        print("="*70)
+
+        return results
+
     def _get_ist_time(self) -> str:
         """Get current time in IST"""
         return datetime.now(IST).strftime('%d %b %Y, %I:%M %p IST')
@@ -293,7 +352,7 @@ class TradingSystem:
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(description='Super Math Trading System')
-    parser.add_argument('--mode', choices=['once', 'continuous', 'dashboard', 'comparison'],
+    parser.add_argument('--mode', choices=['once', 'continuous', 'dashboard', 'comparison', 'eod'],
                        default='once', help='Run mode')
     parser.add_argument('--test-discord', action='store_true',
                        help='Test Discord connection')
@@ -301,6 +360,8 @@ def main():
                        help='Show portfolio summary')
     parser.add_argument('--enable-comparison', action='store_true',
                        help='Enable 3-portfolio comparison (EXCELLENT/MODERATE/ALL)')
+    parser.add_argument('--eod-top-n', type=int, default=100,
+                       help='Number of top stocks to save from EOD scan (default: 100)')
 
     args = parser.parse_args()
 
@@ -354,6 +415,13 @@ def main():
         subprocess.run(['streamlit', 'run', 'comparison_dashboard.py',
                        '--server.port', str(DASHBOARD_PORT + 1),
                        '--server.headless', 'true'])
+        return
+
+    # EOD Scan mode
+    if args.mode == 'eod':
+        print("\n🌙 End-of-Day Scanner Mode")
+        system = TradingSystem(use_eod_stocks=False)  # Don't load EOD stocks when running EOD scan
+        system.run_eod_scan(top_n=args.eod_top_n)
         return
 
     # Initialize system (enable comparison if requested or in comparison mode)

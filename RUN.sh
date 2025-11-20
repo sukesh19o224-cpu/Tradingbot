@@ -20,11 +20,12 @@ show_menu() {
     echo ""
     echo "  1) 🎯 Single Scan           - Run one scan cycle"
     echo "  2) 🔄 Live Mode             - Run continuously (recommended)"
-    echo "  3) 📊 Dashboard             - Open main dashboard"
-    echo "  4) 🎯 Comparison Mode       - Test 3 strategies"
-    echo "  5) 📈 Show Summary          - View current performance"
-    echo "  6) 🧪 Test Discord          - Test Discord alerts"
-    echo "  7) ❌ Exit"
+    echo "  3) 🌙 EOD Scanner           - Scan all NSE stocks (after market close)"
+    echo "  4) 📊 Dashboard             - Open main dashboard"
+    echo "  5) 🎯 Comparison Mode       - Test 3 strategies"
+    echo "  6) 📈 Show Summary          - View current performance"
+    echo "  7) 🧪 Test Discord          - Test Discord alerts"
+    echo "  8) ❌ Exit"
     echo ""
 }
 
@@ -40,7 +41,8 @@ run_live_mode() {
     echo "🔄 Starting live continuous mode..."
     echo ""
     echo "📌 System will:"
-    echo "   • Scan 200 stocks every 5 minutes"
+    echo "   • Use top stocks from EOD scan (if available)"
+    echo "   • Scan stocks every 5 minutes with 15-minute + daily candles"
     echo "   • Generate signals and send Discord alerts"
     echo "   • Execute paper trades automatically"
     echo "   • Monitor positions for exits"
@@ -50,6 +52,50 @@ run_live_mode() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     python3 main.py --mode continuous
+}
+
+run_eod_scan() {
+    echo ""
+    echo "╔══════════════════════════════════════════════════════════╗"
+    echo "║     🌙 END-OF-DAY SCANNER                               ║"
+    echo "╚══════════════════════════════════════════════════════════╝"
+    echo ""
+    echo "⏰ Best time: After 3:30 PM IST (market close)"
+    echo "📊 Scans: ALL NSE stocks (~500 stocks)"
+    echo "⏱️  Time needed: 5-10 minutes"
+    echo "💾 Saves: Top 100 stocks for tomorrow"
+    echo ""
+    echo "📈 This scan ranks all NSE stocks by signal quality"
+    echo "   Tomorrow's live scan will focus on these top stocks"
+    echo ""
+    echo "How many top stocks to save?"
+    echo "  1) Top 50  (conservative)"
+    echo "  2) Top 100 (recommended)"
+    echo "  3) Top 150 (aggressive)"
+    echo ""
+    read -p "Enter choice (1-3) [default: 2]: " eod_choice
+    eod_choice=${eod_choice:-2}
+
+    case $eod_choice in
+        1)
+            top_n=50
+            ;;
+        2)
+            top_n=100
+            ;;
+        3)
+            top_n=150
+            ;;
+        *)
+            top_n=100
+            ;;
+    esac
+
+    echo ""
+    echo "🚀 Starting EOD scan (top $top_n stocks will be saved)..."
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    python3 main.py --mode eod --eod-top-n $top_n
 }
 
 run_dashboard() {
@@ -164,6 +210,9 @@ case "$1" in
     live|continuous)
         run_live_mode
         ;;
+    eod)
+        run_eod_scan
+        ;;
     dashboard|dash)
         run_dashboard
         ;;
@@ -180,7 +229,7 @@ case "$1" in
         # Interactive menu
         while true; do
             show_menu
-            read -p "Enter choice (1-7): " choice
+            read -p "Enter choice (1-8): " choice
 
             case $choice in
                 1)
@@ -192,21 +241,26 @@ case "$1" in
                     run_live_mode
                     ;;
                 3)
-                    run_dashboard
+                    run_eod_scan
+                    echo ""
+                    read -p "Press Enter to continue..."
                     ;;
                 4)
-                    run_comparison_mode
+                    run_dashboard
                     ;;
                 5)
+                    run_comparison_mode
+                    ;;
+                6)
                     show_summary
                     echo ""
                     read -p "Press Enter to continue..."
                     ;;
-                6)
+                7)
                     test_discord
                     read -p "Press Enter to continue..."
                     ;;
-                7)
+                8)
                     echo ""
                     echo "👋 Goodbye!"
                     echo ""
@@ -214,7 +268,7 @@ case "$1" in
                     ;;
                 *)
                     echo ""
-                    echo "❌ Invalid choice. Please enter 1-7."
+                    echo "❌ Invalid choice. Please enter 1-8."
                     sleep 2
                     ;;
             esac
