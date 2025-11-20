@@ -238,7 +238,8 @@ class HybridDetector:
             'target3': target3,
             'stop_loss': stop_loss,
             'risk_reward_ratio': risk_reward,
-            'expected_holding': '1-5 days',
+            'expected_holding': '1-7 days',
+            'max_holding_days': 7,  # Auto-exit after 7 days
             'expected_return': 8.0,  # 8% target
             'score': base_signal.get('score', 8.0),
             'timestamp': datetime.now().isoformat(),
@@ -283,6 +284,7 @@ class HybridDetector:
             'stop_loss': stop_loss,
             'risk_reward_ratio': risk_reward,
             'expected_holding': '2-4 weeks',
+            'max_holding_days': 30,  # Auto-exit after 30 days
             'expected_return': 22.0,  # 22% target
             'score': base_signal.get('score', 7.5),
             'timestamp': datetime.now().isoformat(),

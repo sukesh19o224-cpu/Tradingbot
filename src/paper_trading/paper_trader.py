@@ -143,7 +143,9 @@ class PaperTrader:
                 'target3': signal['target3'],
                 'stop_loss': signal['stop_loss'],
                 'score': signal['score'],
-                'cost': cost
+                'cost': cost,
+                'max_holding_days': signal.get('max_holding_days', 30),  # Default 30 days
+                'strategy': signal.get('strategy', 'unknown')
             }
 
             self._save_portfolio()
@@ -177,6 +179,23 @@ class PaperTrader:
 
             entry_price = position['entry_price']
             shares = position['shares']
+
+            # Check max holding period (time-based exit)
+            if 'entry_date' in position and 'max_holding_days' in position:
+                try:
+                    entry_date = datetime.fromisoformat(position['entry_date'])
+                    days_held = (datetime.now() - entry_date).days
+                    max_days = position['max_holding_days']
+
+                    if days_held >= max_days:
+                        exit_info = self._exit_position(
+                            symbol, current_price, f'MAX_HOLDING_PERIOD ({days_held} days)', full_exit=True
+                        )
+                        if exit_info:
+                            exits.append(exit_info)
+                        continue
+                except Exception as e:
+                    print(f"⚠️ Error checking holding period for {symbol}: {e}")
 
             # Check stop loss
             if current_price <= position['stop_loss']:
