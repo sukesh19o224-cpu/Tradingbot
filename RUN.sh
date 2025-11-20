@@ -13,21 +13,23 @@ fi
 show_menu() {
     echo ""
     echo "╔══════════════════════════════════════════════════════════╗"
-    echo "║     🚀 SUPER MATH TRADING SYSTEM                        ║"
+    echo "║     🎯 HYBRID TRADING SYSTEM                            ║"
+    echo "║     Swing + Positional • Dual Portfolio                 ║"
     echo "╚══════════════════════════════════════════════════════════╝"
     echo ""
     echo "Choose what to run:"
     echo ""
-    echo "  1) 🎯 Single Scan           - Run one scan cycle"
-    echo "  2) ✨ AUTOMATIC Mode        - Fully automatic! (RECOMMENDED)"
+    echo "  1) 🎯 Single Scan           - Run one hybrid scan"
+    echo "  2) 🔥 HYBRID Mode           - Swing + Positional! (RECOMMENDED)"
     echo "  3) 🌙 EOD Scanner           - Manual EOD scan (for testing)"
     echo "  4) 📊 Dashboard             - Open main dashboard"
     echo "  5) 🎯 Comparison Mode       - Test 3 strategies"
-    echo "  6) 📈 Show Summary          - View current performance"
+    echo "  6) 📈 Show Summary          - View dual portfolio performance"
     echo "  7) 🧪 Test Discord          - Test Discord alerts"
     echo "  8) ❌ Exit"
     echo ""
-    echo "💡 NEW: Option 2 = Fully automatic! EOD scan at 4 PM daily"
+    echo "💡 NEW: Option 2 = HYBRID! Swing + Positional simultaneously"
+    echo "   • Scans ALL 800 stocks • Never misses opportunities!"
     echo ""
 }
 
@@ -41,61 +43,33 @@ run_single_scan() {
 run_live_mode() {
     echo ""
     echo "╔══════════════════════════════════════════════════════════╗"
-    echo "║     🔄 FULLY AUTOMATIC CONTINUOUS MODE                  ║"
+    echo "║     🎯 HYBRID AUTOMATIC MODE                            ║"
+    echo "║     Swing + Positional Trading Simultaneously           ║"
     echo "╚══════════════════════════════════════════════════════════╝"
     echo ""
-    echo "✨ FULLY AUTOMATIC SYSTEM - Just run once!"
+    echo "✨ HYBRID SYSTEM - Never miss opportunities!"
     echo ""
-    echo "📌 System will AUTOMATICALLY:"
-    echo "   • Morning (9:15 AM): Load top stocks from yesterday's EOD scan"
-    echo "   • Market hours: Scan every 5 minutes (Daily + 15-min candles)"
-    echo "   • Generate signals and send Discord alerts"
-    echo "   • Execute paper trades and monitor positions"
-    echo "   • 3:30 PM: Generate daily summary"
-    echo "   • 4:00 PM: Run automatic EOD scan of ALL NSE stocks"
-    echo "   • Rank top 500 stocks in 4 tiers for next day"
-    echo "   • Sleep until next market open"
+    echo "📌 How it works:"
+    echo "   • Scans ALL 800 verified NSE stocks"
+    echo "   • Every stock checked for BOTH opportunities:"
+    echo "     🔥 Swing: Fast momentum, breakouts (5-10%, 1-5 days)"
+    echo "     📈 Positional: Trends, pullbacks (15-30%, 2-4 weeks)"
+    echo "   • Dual portfolios (60% swing, 40% positional)"
+    echo "   • Separate Discord alerts for each type"
+    echo "   • Market hours: Scan every 5 minutes"
+    echo "   • 3:30 PM: Daily summary"
     echo ""
-    echo "🎯 Which tier of stocks to trade?"
-    echo "   TIER 1: Top 50  (Best swing trades - aggressive)"
-    echo "   TIER 2: Top 100 (Swing + positional - balanced)"
-    echo "   TIER 3: Top 250 (Positional - medium-term)"
-    echo "   TIER 4: Top 500 (All viable - conservative)"
+    echo "💼 Portfolio Split:"
+    echo "   🔥 Swing Portfolio: 60% capital (aggressive short-term)"
+    echo "   📈 Positional Portfolio: 40% capital (conservative long-term)"
     echo ""
-    read -p "Enter tier (1-4) [default: 1]: " tier_choice
-    tier_choice=${tier_choice:-1}
-
-    case $tier_choice in
-        1)
-            tier="tier1"
-            tier_name="TIER 1 - TOP 50 (Swing Trading)"
-            ;;
-        2)
-            tier="tier2"
-            tier_name="TIER 2 - TOP 100 (Swing + Positional)"
-            ;;
-        3)
-            tier="tier3"
-            tier_name="TIER 3 - TOP 250 (Positional)"
-            ;;
-        4)
-            tier="tier4"
-            tier_name="TIER 4 - TOP 500 (All Viable)"
-            ;;
-        *)
-            tier="tier1"
-            tier_name="TIER 1 - TOP 50 (Swing Trading)"
-            ;;
-    esac
-
+    echo "Press Enter to start, or Ctrl+C to cancel"
+    read -p ""
     echo ""
-    echo "🚀 Starting fully automatic mode with $tier_name"
-    echo ""
-    echo "✨ Just leave it running - it handles everything!"
-    echo "Press Ctrl+C to stop"
+    echo "🚀 Starting HYBRID automatic mode..."
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    python3 main.py --mode continuous --eod-tier $tier
+    python3 main.py --mode continuous
 }
 
 run_eod_scan() {
