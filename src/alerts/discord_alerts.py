@@ -167,13 +167,14 @@ class DiscordAlerts:
         except Exception as e:
             print(f"❌ Discord BUY alert error: {e}")
 
-    def send_exit_alert(self, exit_info: Dict, paper_trade: bool = False):
+    def send_exit_alert(self, exit_info: Dict, paper_trade: bool = False, strategy: str = None):
         """
         Send EXIT alert
 
         Args:
             exit_info: Exit information dict
             paper_trade: Whether this is a paper trade
+            strategy: 'swing' or 'positional' (optional)
         """
         if not self.enabled:
             return
@@ -188,6 +189,17 @@ class DiscordAlerts:
             # Mode indicator
             mode = " [PAPER]" if paper_trade else ""
 
+            # Strategy indicator
+            if strategy == 'swing':
+                strategy_emoji = "🔥"
+                strategy_name = "SWING"
+            elif strategy == 'positional':
+                strategy_emoji = "📈"
+                strategy_name = "POSITIONAL"
+            else:
+                strategy_emoji = ""
+                strategy_name = ""
+
             # Color and emoji based on profit/loss
             if pnl > 0:
                 color = 65280  # Green
@@ -201,7 +213,8 @@ class DiscordAlerts:
             # Exit type
             exit_type = exit_info.get('exit_type', 'FULL')
 
-            description = f"**Result:** {result}\n**Reason:** {reason}\n**Exit Type:** {exit_type}"
+            description = f"**Strategy:** {strategy_emoji} {strategy_name}\n" if strategy_name else ""
+            description += f"**Result:** {result}\n**Reason:** {reason}\n**Exit Type:** {exit_type}"
 
             fields = [
                 {
@@ -356,6 +369,127 @@ class DiscordAlerts:
         except Exception as e:
             print(f"❌ Test alert error: {e}")
             return False
+
+    def send_swing_signal(self, signal: Dict):
+        """
+        Send SWING trading signal alert
+
+        Args:
+            signal: Swing signal dictionary
+        """
+        if not self.enabled:
+            return
+
+        # Add swing-specific formatting
+        signal['trade_type'] = signal.get('trade_type', '🔥 SWING TRADE')
+        self.send_buy_signal(signal, paper_trade=True)
+
+    def send_positional_signal(self, signal: Dict):
+        """
+        Send POSITIONAL trading signal alert
+
+        Args:
+            signal: Positional signal dictionary
+        """
+        if not self.enabled:
+            return
+
+        # Add positional-specific formatting
+        signal['trade_type'] = signal.get('trade_type', '📈 POSITIONAL TRADE')
+        self.send_buy_signal(signal, paper_trade=True)
+
+    def send_dual_portfolio_summary(self, summary: Dict):
+        """
+        Send dual portfolio (swing + positional) summary
+
+        Args:
+            summary: Combined portfolio summary from DualPortfolio
+        """
+        if not self.enabled:
+            return
+
+        try:
+            # Overall performance
+            total_value = summary['total_portfolio_value']
+            total_return = summary['total_return']
+            total_return_pct = summary['total_return_pct']
+            win_rate = summary['win_rate']
+
+            # Swing portfolio
+            swing = summary['swing']
+            swing_value = swing['portfolio_value']
+            swing_return_pct = swing['return_pct']
+            swing_positions = swing['positions']
+            swing_trades = swing['trades']
+            swing_wr = swing['win_rate']
+
+            # Positional portfolio
+            pos = summary['positional']
+            pos_value = pos['portfolio_value']
+            pos_return_pct = pos['return_pct']
+            pos_positions = pos['positions']
+            pos_trades = pos['trades']
+            pos_wr = pos['win_rate']
+
+            # Determine color based on overall performance
+            if total_return_pct > 5:
+                color = 5763719  # Green
+            elif total_return_pct > 0:
+                color = 15844367  # Gold
+            else:
+                color = 15158332  # Red
+
+            embed = {
+                "title": "💼 Dual Portfolio Daily Summary",
+                "description": "Swing Trading + Positional Trading Performance",
+                "color": color,
+                "fields": [
+                    {
+                        "name": "📊 OVERALL PERFORMANCE",
+                        "value": f"**Total Value:** ₹{total_value:,.0f}\n"
+                                f"**Return:** ₹{total_return:+,.0f} ({total_return_pct:+.2f}%)\n"
+                                f"**Total Trades:** {summary['total_trades']}\n"
+                                f"**Win Rate:** {win_rate:.1f}%",
+                        "inline": False
+                    },
+                    {
+                        "name": "🔥 SWING PORTFOLIO (60%)",
+                        "value": f"**Value:** ₹{swing_value:,.0f}\n"
+                                f"**Return:** {swing_return_pct:+.2f}%\n"
+                                f"**Positions:** {swing_positions}\n"
+                                f"**Trades:** {swing_trades} (WR: {swing_wr:.1f}%)\n"
+                                f"**Avg Hold:** {swing['avg_holding_days']:.1f} days",
+                        "inline": True
+                    },
+                    {
+                        "name": "📈 POSITIONAL PORTFOLIO (40%)",
+                        "value": f"**Value:** ₹{pos_value:,.0f}\n"
+                                f"**Return:** {pos_return_pct:+.2f}%\n"
+                                f"**Positions:** {pos_positions}\n"
+                                f"**Trades:** {pos_trades} (WR: {pos_wr:.1f}%)\n"
+                                f"**Avg Hold:** {pos['avg_holding_days']:.1f} days",
+                        "inline": True
+                    }
+                ],
+                "footer": {
+                    "text": f"Hybrid Trading System | {self._get_ist_time()}"
+                }
+            }
+
+            data = {
+                "content": "📊 **End of Day Summary**",
+                "embeds": [embed]
+            }
+
+            requests.post(
+                self.webhook_url,
+                data=json.dumps(data),
+                headers={"Content-Type": "application/json"},
+                timeout=10
+            )
+
+        except Exception as e:
+            print(f"⚠️ Error sending dual portfolio summary: {e}")
 
     def _get_ist_time(self) -> str:
         """Get current time in IST"""
