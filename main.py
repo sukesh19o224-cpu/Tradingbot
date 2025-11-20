@@ -15,6 +15,7 @@ from src.data.fast_scanner import FastScanner
 from src.strategies.signal_generator import SignalGenerator
 from src.paper_trading.paper_trader import PaperTrader
 from src.alerts.discord_alerts import DiscordAlerts
+from src.comparison.portfolio_comparison import PortfolioComparison
 
 IST = pytz.timezone('Asia/Kolkata')
 
@@ -31,7 +32,7 @@ class TradingSystem:
     - Manage daily operations
     """
 
-    def __init__(self):
+    def __init__(self, enable_comparison=False):
         print("🚀 Initializing Super Math Trading System...")
 
         self.data_fetcher = DataFetcher()
@@ -39,6 +40,10 @@ class TradingSystem:
         self.signal_generator = SignalGenerator()
         self.paper_trader = PaperTrader()
         self.discord = DiscordAlerts()
+
+        # Portfolio comparison (for live strategy testing)
+        self.enable_comparison = enable_comparison
+        self.portfolio_comparison = PortfolioComparison() if enable_comparison else None
 
         self.watchlist = DEFAULT_WATCHLIST
         self.is_running = False
@@ -48,6 +53,9 @@ class TradingSystem:
         print(f"⚡ Multi-threaded scanning: ENABLED (10x faster)")
         print(f"💰 Paper Trading Capital: ₹{self.paper_trader.capital:,.0f}")
         print(f"📱 Discord Alerts: {'Enabled' if self.discord.enabled else 'Disabled'}")
+        if enable_comparison:
+            print(f"🎯 Portfolio Comparison: ENABLED (3 strategies)")
+            print(f"   📊 A: EXCELLENT (≥8.5) | B: MODERATE (≥8.0) | C: ALL (≥7.0)")
 
     def run_scan(self) -> List[Dict]:
         """
@@ -108,6 +116,10 @@ class TradingSystem:
                 else:
                     print(f"⏭️ Skipped {symbol} (already holding or insufficient capital)")
 
+            # Route to portfolio comparison (if enabled)
+            if self.enable_comparison and self.portfolio_comparison:
+                self.portfolio_comparison.process_signal(signal)
+
         print("\n✅ Signal processing complete")
 
     def monitor_positions(self):
@@ -119,34 +131,61 @@ class TradingSystem:
         - Stop loss
         - Time-based exits
         """
-        if not self.paper_trader.positions:
+        if not self.paper_trader.positions and not (self.enable_comparison and self.portfolio_comparison):
             return
 
-        print(f"\n👁️ Monitoring {len(self.paper_trader.positions)} open positions...")
+        # Monitor paper trading positions
+        if self.paper_trader.positions:
+            print(f"\n👁️ Monitoring {len(self.paper_trader.positions)} paper trading positions...")
 
-        # Get current prices
-        current_prices = {}
-        for symbol in self.paper_trader.positions.keys():
-            price = self.data_fetcher.get_current_price(symbol)
-            if price > 0:
-                current_prices[symbol] = price
+            # Get current prices
+            current_prices = {}
+            for symbol in self.paper_trader.positions.keys():
+                price = self.data_fetcher.get_current_price(symbol)
+                if price > 0:
+                    current_prices[symbol] = price
 
-        # Check for exits
-        exits = self.paper_trader.check_exits(current_prices)
+            # Check for exits
+            exits = self.paper_trader.check_exits(current_prices)
 
-        if exits:
-            print(f"\n🚪 {len(exits)} position(s) exited:")
+            if exits:
+                print(f"\n🚪 {len(exits)} position(s) exited:")
 
-            for exit_info in exits:
-                symbol = exit_info['symbol']
-                pnl = exit_info['pnl']
-                reason = exit_info['reason']
+                for exit_info in exits:
+                    symbol = exit_info['symbol']
+                    pnl = exit_info['pnl']
+                    reason = exit_info['reason']
 
-                print(f"   {symbol}: ₹{pnl:+,.0f} ({reason})")
+                    print(f"   {symbol}: ₹{pnl:+,.0f} ({reason})")
 
-                # Send Discord alert
-                if self.discord.enabled:
-                    self.discord.send_exit_alert(exit_info, paper_trade=True)
+                    # Send Discord alert
+                    if self.discord.enabled:
+                        self.discord.send_exit_alert(exit_info, paper_trade=True)
+
+        # Monitor comparison portfolios
+        if self.enable_comparison and self.portfolio_comparison:
+            # Get all symbols from all portfolios
+            all_symbols = set()
+            for portfolio in self.portfolio_comparison.portfolios.values():
+                all_symbols.update(portfolio['positions'].keys())
+
+            if all_symbols:
+                print(f"\n👁️ Monitoring {len(all_symbols)} comparison portfolio positions...")
+
+                # Get current prices for comparison portfolios
+                comparison_prices = {}
+                for symbol in all_symbols:
+                    price = self.data_fetcher.get_current_price(symbol)
+                    if price > 0:
+                        comparison_prices[symbol] = price
+
+                # Check exits for comparison portfolios
+                comparison_exits = self.portfolio_comparison.check_exits(comparison_prices)
+
+                # Display exits by portfolio
+                for portfolio_name, exits in comparison_exits.items():
+                    if exits:
+                        print(f"\n   📊 {portfolio_name}: {len(exits)} exit(s)")
 
     def send_daily_summary(self):
         """Send end-of-day summary to Discord"""
@@ -254,12 +293,14 @@ class TradingSystem:
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(description='Super Math Trading System')
-    parser.add_argument('--mode', choices=['once', 'continuous', 'dashboard'],
+    parser.add_argument('--mode', choices=['once', 'continuous', 'dashboard', 'comparison'],
                        default='once', help='Run mode')
     parser.add_argument('--test-discord', action='store_true',
                        help='Test Discord connection')
     parser.add_argument('--summary', action='store_true',
                        help='Show portfolio summary')
+    parser.add_argument('--enable-comparison', action='store_true',
+                       help='Enable 3-portfolio comparison (EXCELLENT/MODERATE/ALL)')
 
     args = parser.parse_args()
 
@@ -301,8 +342,23 @@ def main():
                        '--server.headless', 'true'])
         return
 
-    # Initialize system
-    system = TradingSystem()
+    # Comparison Dashboard mode
+    if args.mode == 'comparison':
+        print("\n🎯 Starting Strategy Comparison Dashboard...")
+        print(f"🌐 Open browser to: http://localhost:{DASHBOARD_PORT + 1}")
+        print("\n📊 Comparing 3 strategies:")
+        print("   🟢 EXCELLENT: Score ≥ 8.5")
+        print("   🟡 MODERATE: Score ≥ 8.0")
+        print("   🔵 ALL SIGNALS: Score ≥ 7.0")
+        import subprocess
+        subprocess.run(['streamlit', 'run', 'comparison_dashboard.py',
+                       '--server.port', str(DASHBOARD_PORT + 1),
+                       '--server.headless', 'true'])
+        return
+
+    # Initialize system (enable comparison if requested or in comparison mode)
+    enable_comparison = args.enable_comparison or args.mode == 'comparison'
+    system = TradingSystem(enable_comparison=enable_comparison)
 
     # Run based on mode
     if args.mode == 'once':
@@ -311,6 +367,8 @@ def main():
 
     elif args.mode == 'continuous':
         print("\n🔄 Running continuous mode...")
+        if enable_comparison:
+            print("📊 Portfolio comparison enabled - tracking 3 strategies simultaneously")
         print("Press Ctrl+C to stop")
         system.run_continuous()
 
