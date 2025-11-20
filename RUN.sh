@@ -22,14 +22,14 @@ show_menu() {
     echo "  1) 🎯 Single Scan           - Run one hybrid scan"
     echo "  2) 🔥 HYBRID Mode           - Swing + Positional! (RECOMMENDED)"
     echo "  3) 🌙 EOD Scanner           - Manual EOD scan (for testing)"
-    echo "  4) 📊 Dashboard             - Open main dashboard"
-    echo "  5) 🎯 Comparison Mode       - Test 3 strategies"
-    echo "  6) 📈 Show Summary          - View dual portfolio performance"
-    echo "  7) 🧪 Test Discord          - Test Discord alerts"
-    echo "  8) ❌ Exit"
+    echo "  4) 📊 GUI Dashboard         - Live Portfolio Dashboard (NEW!)"
+    echo "  5) 📈 Show Summary          - View dual portfolio performance"
+    echo "  6) 🧪 Test Discord          - Test Discord alerts"
+    echo "  7) ❌ Exit"
     echo ""
-    echo "💡 NEW: Option 2 = HYBRID! Swing + Positional simultaneously"
+    echo "💡 HYBRID Mode: Swing + Positional simultaneously"
     echo "   • Scans ALL 800 stocks • Never misses opportunities!"
+    echo "💡 GUI Dashboard: Beautiful live portfolio viewer!"
     echo ""
 }
 
@@ -122,15 +122,22 @@ run_eod_scan() {
     python3 main.py --mode eod --eod-top-n $top_n
 }
 
-run_dashboard() {
+run_gui_dashboard() {
     echo ""
-    echo "📊 Opening main dashboard..."
-    echo "🌐 Browser: http://localhost:8501"
+    echo "╔══════════════════════════════════════════════════════════╗"
+    echo "║     📊 LIVE PORTFOLIO DASHBOARD (GUI)                   ║"
+    echo "╚══════════════════════════════════════════════════════════╝"
     echo ""
-    echo "Press Ctrl+C to stop"
+    echo "✨ Features:"
+    echo "   • Live portfolio summary (capital, P&L, win rate)"
+    echo "   • Open positions table (both swing & positional)"
+    echo "   • Complete trade history logs"
+    echo "   • Auto-refresh every 5 seconds"
+    echo ""
+    echo "Press Ctrl+C to close"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    python3 main.py --mode dashboard
+    python3 GUI.py
 }
 
 run_comparison_mode() {
@@ -237,11 +244,8 @@ case "$1" in
     eod)
         run_eod_scan
         ;;
-    dashboard|dash)
-        run_dashboard
-        ;;
-    comparison|compare|test)
-        run_comparison_mode
+    gui)
+        run_gui_dashboard
         ;;
     summary|stats)
         show_summary
@@ -253,7 +257,7 @@ case "$1" in
         # Interactive menu
         while true; do
             show_menu
-            read -p "Enter choice (1-8): " choice
+            read -p "Enter choice (1-7): " choice
 
             case $choice in
                 1)
@@ -270,21 +274,21 @@ case "$1" in
                     read -p "Press Enter to continue..."
                     ;;
                 4)
-                    run_dashboard
+                    run_gui_dashboard
+                    echo ""
+                    read -p "Press Enter to continue..."
                     ;;
                 5)
-                    run_comparison_mode
-                    ;;
-                6)
                     show_summary
                     echo ""
                     read -p "Press Enter to continue..."
                     ;;
-                7)
+                6)
                     test_discord
+                    echo ""
                     read -p "Press Enter to continue..."
                     ;;
-                8)
+                7)
                     echo ""
                     echo "👋 Goodbye!"
                     echo ""
@@ -292,7 +296,7 @@ case "$1" in
                     ;;
                 *)
                     echo ""
-                    echo "❌ Invalid choice. Please enter 1-8."
+                    echo "❌ Invalid choice. Please enter 1-7."
                     sleep 2
                     ;;
             esac

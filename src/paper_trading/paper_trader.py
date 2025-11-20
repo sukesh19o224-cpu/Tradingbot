@@ -24,9 +24,19 @@ class PaperTrader:
     - Position management (targets & stop loss)
     """
 
-    def __init__(self, initial_capital: float = PAPER_TRADING_CAPITAL):
-        self.portfolio_file = PAPER_TRADING_FILE
-        self.initial_capital = initial_capital
+    def __init__(self, capital: float = None, data_file: str = None, portfolio_file: str = None):
+        """
+        Initialize paper trader
+
+        Args:
+            capital: Initial capital (if starting fresh)
+            data_file: Path to trades history file
+            portfolio_file: Path to portfolio state file
+        """
+        # Use provided files or defaults
+        self.trades_file = data_file if data_file else 'data/trades.json'
+        self.portfolio_file = portfolio_file if portfolio_file else PAPER_TRADING_FILE
+        self.initial_capital = capital if capital else PAPER_TRADING_CAPITAL
 
         # Load or initialize portfolio
         if os.path.exists(self.portfolio_file):
@@ -60,15 +70,34 @@ class PaperTrader:
 
             self.capital = data.get('capital', self.initial_capital)
             self.positions = data.get('positions', {})
-            self.trade_history = data.get('trade_history', [])
             self.performance = data.get('performance', {})
             self.start_date = data.get('start_date', datetime.now().isoformat())
+
+            # Load initial capital from saved data
+            saved_initial = data.get('initial_capital')
+            if saved_initial:
+                self.initial_capital = saved_initial
+
+            # Load trade history from separate file
+            self._load_trades()
 
             print(f"📄 Paper Portfolio loaded - Capital: ₹{self.capital:,.0f}")
 
         except Exception as e:
             print(f"❌ Error loading portfolio: {e}")
             self._initialize_portfolio()
+
+    def _load_trades(self):
+        """Load trade history from separate file"""
+        try:
+            if os.path.exists(self.trades_file):
+                with open(self.trades_file, 'r') as f:
+                    self.trade_history = json.load(f)
+            else:
+                self.trade_history = []
+        except Exception as e:
+            print(f"❌ Error loading trades: {e}")
+            self.trade_history = []
 
     def _save_portfolio(self):
         """Save portfolio to file"""
@@ -78,10 +107,10 @@ class PaperTrader:
             data = {
                 'capital': self.capital,
                 'positions': self.positions,
-                'trade_history': self.trade_history,
                 'performance': self.performance,
                 'start_date': self.start_date,
                 'last_updated': datetime.now().isoformat(),
+                'initial_capital': self.initial_capital,
                 'mode': 'PAPER_TRADING'
             }
 
@@ -90,6 +119,17 @@ class PaperTrader:
 
         except Exception as e:
             print(f"❌ Error saving portfolio: {e}")
+
+    def _save_trades(self):
+        """Save trade history to separate file"""
+        try:
+            os.makedirs(os.path.dirname(self.trades_file), exist_ok=True)
+
+            with open(self.trades_file, 'w') as f:
+                json.dump(self.trade_history, f, indent=2)
+
+        except Exception as e:
+            print(f"❌ Error saving trades: {e}")
 
     def execute_signal(self, signal: Dict) -> bool:
         """
@@ -149,6 +189,7 @@ class PaperTrader:
             }
 
             self._save_portfolio()
+            # No need to save trades here - no trade completed yet
 
             print(f"📄 PAPER BUY: {symbol} x{shares} @ ₹{entry_price:.2f} = ₹{cost:,.0f}")
             print(f"   Remaining Capital: ₹{self.capital:,.0f}")
@@ -296,6 +337,7 @@ class PaperTrader:
                     self.performance['worst_trade'] = pnl
 
             self._save_portfolio()
+            self._save_trades()  # Save trade history when trade completes
 
             exit_type = 'PARTIAL' if shares_to_sell < position['shares'] else 'FULL'
 
