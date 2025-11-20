@@ -152,114 +152,111 @@ class TradingSystem:
 
     def monitor_positions(self):
         """
-        Monitor open positions and check for exits
+        Monitor BOTH swing and positional positions
 
-        Checks:
-        - Target hits
-        - Stop loss
-        - Time-based exits
+        Swing trades: Check every 15 minutes (tighter stops)
+        Positional trades: Check every hour (wider stops)
         """
-        if not self.paper_trader.positions and not (self.enable_comparison and self.portfolio_comparison):
+        all_positions = self.dual_portfolio.get_all_open_positions()
+        swing_positions = all_positions['swing']
+        positional_positions = all_positions['positional']
+
+        if not swing_positions and not positional_positions:
             return
 
-        # Monitor paper trading positions
-        if self.paper_trader.positions:
-            print(f"\n👁️ Monitoring {len(self.paper_trader.positions)} paper trading positions...")
+        # Monitor swing positions (more frequently)
+        if swing_positions:
+            print(f"\n👁️ Monitoring {len(swing_positions)} swing positions...")
 
             # Get current prices
             current_prices = {}
-            for symbol in self.paper_trader.positions.keys():
+            for symbol in swing_positions.keys():
                 price = self.data_fetcher.get_current_price(symbol)
                 if price > 0:
                     current_prices[symbol] = price
 
             # Check for exits
-            exits = self.paper_trader.check_exits(current_prices)
+            exits = self.dual_portfolio.monitor_swing_positions(current_prices)
 
             if exits:
-                print(f"\n🚪 {len(exits)} position(s) exited:")
+                print(f"\n🚪 {len(exits)} swing position(s) exited:")
 
                 for exit_info in exits:
                     symbol = exit_info['symbol']
                     pnl = exit_info['pnl']
                     reason = exit_info['reason']
 
-                    print(f"   {symbol}: ₹{pnl:+,.0f} ({reason})")
+                    print(f"   🔥 {symbol}: ₹{pnl:+,.0f} ({reason})")
 
                     # Send Discord alert
                     if self.discord.enabled:
-                        self.discord.send_exit_alert(exit_info, paper_trade=True)
+                        self.discord.send_exit_alert(exit_info, strategy='swing')
 
-        # Monitor comparison portfolios
-        if self.enable_comparison and self.portfolio_comparison:
-            # Get all symbols from all portfolios
-            all_symbols = set()
-            for portfolio in self.portfolio_comparison.portfolios.values():
-                all_symbols.update(portfolio['positions'].keys())
+        # Monitor positional positions
+        if positional_positions:
+            print(f"\n👁️ Monitoring {len(positional_positions)} positional positions...")
 
-            if all_symbols:
-                print(f"\n👁️ Monitoring {len(all_symbols)} comparison portfolio positions...")
+            # Get current prices
+            current_prices = {}
+            for symbol in positional_positions.keys():
+                price = self.data_fetcher.get_current_price(symbol)
+                if price > 0:
+                    current_prices[symbol] = price
 
-                # Get current prices for comparison portfolios
-                comparison_prices = {}
-                for symbol in all_symbols:
-                    price = self.data_fetcher.get_current_price(symbol)
-                    if price > 0:
-                        comparison_prices[symbol] = price
+            # Check for exits
+            exits = self.dual_portfolio.monitor_positional_positions(current_prices)
 
-                # Check exits for comparison portfolios
-                comparison_exits = self.portfolio_comparison.check_exits(comparison_prices)
+            if exits:
+                print(f"\n🚪 {len(exits)} positional position(s) exited:")
 
-                # Display exits by portfolio
-                for portfolio_name, exits in comparison_exits.items():
-                    if exits:
-                        print(f"\n   📊 {portfolio_name}: {len(exits)} exit(s)")
+                for exit_info in exits:
+                    symbol = exit_info['symbol']
+                    pnl = exit_info['pnl']
+                    reason = exit_info['reason']
+
+                    print(f"   📈 {symbol}: ₹{pnl:+,.0f} ({reason})")
+
+                    # Send Discord alert
+                    if self.discord.enabled:
+                        self.discord.send_exit_alert(exit_info, strategy='positional')
 
     def send_daily_summary(self):
-        """Send end-of-day summary to Discord"""
+        """Send end-of-day summary to Discord (DUAL portfolio)"""
         print("\n📊 Generating daily summary...")
 
-        summary = self.paper_trader.get_summary()
+        # Get combined summary
+        summary = self.dual_portfolio.get_combined_summary()
 
         # Send to Discord
         if self.discord.enabled and SEND_DAILY_SUMMARY:
-            self.discord.send_daily_summary(summary)
+            self.discord.send_dual_portfolio_summary(summary)
 
         # Print to console
-        print("\n" + "="*60)
-        print("📊 DAILY SUMMARY")
-        print("="*60)
-        print(f"💼 Portfolio Value: ₹{summary['portfolio_value']:,.0f}")
-        print(f"📈 Total Return: {summary['total_return_percent']:+.2f}%")
-        print(f"💰 Cash: ₹{summary['capital']:,.0f}")
-        print(f"📊 Open Positions: {summary['open_positions']}")
-        print(f"🎯 Win Rate: {summary['win_rate']:.1f}%")
-        print(f"📈 Total Trades: {summary['total_trades']}")
-        print("="*60)
+        self.dual_portfolio.print_summary()
 
     def run_continuous(self):
         """
-        Run system continuously during market hours with automatic EOD scan
+        Run HYBRID system continuously - scans ALL stocks for both opportunities
 
         Schedule:
-        - Pre-market: Wait for 9:15 AM
-        - Market hours (9:15 AM - 3:30 PM): Scan every SCAN_INTERVAL_MINUTES
+        - Market hours (9:15 AM - 3:30 PM): Hybrid scan every 5 minutes
+        - Detects swing + positional setups simultaneously
         - Position monitoring: Every 3 minutes
         - Post-market (3:30 PM): Daily summary
-        - EOD scan (4:00 PM): Automatic full NSE scan for next day
         - Night: Sleep until next market open
         """
-        print("\n🔄 Starting FULLY AUTOMATIC continuous mode...")
+        print("\n🔄 Starting HYBRID AUTOMATIC MODE...")
+        print(f"🎯 Scanning: ALL {len(self.watchlist)} NSE stocks")
         print(f"⏰ Market Hours: {MARKET_OPEN_TIME} - {MARKET_CLOSE_TIME} IST")
-        print(f"🔍 Intraday Scan: Every {SCAN_INTERVAL_MINUTES} minutes")
+        print(f"🔍 Hybrid Scan: Every {SCAN_INTERVAL_MINUTES} minutes")
+        print(f"   🔥 Swing detection: Fast momentum, breakouts (5-10%, 1-5 days)")
+        print(f"   📈 Positional detection: Trends, pullbacks (15-30%, 2-4 weeks)")
         print(f"📊 Position Monitor: Every {POSITION_MONITOR_INTERVAL} minutes")
-        print(f"🌙 EOD Scan: 4:00 PM IST (automatic)")
-        print(f"✨ FULLY AUTOMATIC: Just run once, system handles everything!")
+        print(f"✨ FULLY AUTOMATIC: No missed opportunities!")
 
         self.is_running = True
         last_scan_time = None
         last_monitor_time = None
-        eod_scan_done_today = False  # Track if EOD scan completed today
 
         try:
             while self.is_running:
@@ -269,7 +266,6 @@ class TradingSystem:
                 # Market hours
                 market_open = dt_time(9, 15)
                 market_close = dt_time(15, 30)
-                eod_scan_time = dt_time(16, 0)  # 4:00 PM for EOD scan
 
                 if market_open <= current_time <= market_close:
                     # MARKET HOURS - Intraday scanning and monitoring
@@ -302,31 +298,7 @@ class TradingSystem:
                         self.send_daily_summary()
                         last_scan_time = None  # Reset for next day
 
-                    # Automatic EOD scan at 4:00 PM (once per day)
-                    if current_time >= eod_scan_time and not eod_scan_done_today:
-                        print(f"\n🌙 EOD SCAN TIME - Running automatic full NSE scan...")
-                        print(f"⏰ {self._get_ist_time()}")
-                        print(f"📊 This will scan ALL verified NSE stocks and rank them for tomorrow")
-                        print(f"⏱️  Expected time: 5-10 minutes\n")
-
-                        try:
-                            # Run full EOD scan (automatic, no prompt)
-                            self.run_eod_scan(top_n=500, auto=True)
-                            eod_scan_done_today = True
-                            print(f"\n✅ EOD scan completed! Top stocks ranked for tomorrow.")
-                            print(f"   • TIER 1: Top 50 (Swing Trading)")
-                            print(f"   • TIER 2: Top 100 (Swing + Positional)")
-                            print(f"   • TIER 3: Top 250 (Positional)")
-                            print(f"   • TIER 4: Top 500 (All Viable)")
-
-                        except Exception as e:
-                            print(f"\n⚠️  EOD scan failed: {e}")
-                            print(f"   Will retry tomorrow at 4:00 PM")
-
-                    if eod_scan_done_today:
-                        print(f"\n💤 EOD scan complete. Sleeping until tomorrow's market open...")
-                    else:
-                        print(f"\n⏳ Waiting for EOD scan time (4:00 PM)...")
+                    print(f"\n💤 Market closed. Sleeping until tomorrow's market open...")
 
                     # Sleep for 30 minutes
                     time.sleep(1800)
@@ -335,9 +307,6 @@ class TradingSystem:
                     # NIGHT TIME (10:00 PM - 9:15 AM)
                     print(f"\n🌙 Night mode - Sleeping until market open tomorrow...")
                     print(f"⏰ Next market open: {MARKET_OPEN_TIME} IST")
-
-                    # Reset EOD scan flag for next day
-                    eod_scan_done_today = False
 
                     # Sleep for 1 hour
                     time.sleep(3600)
@@ -400,20 +369,17 @@ class TradingSystem:
 
 def main():
     """Main entry point"""
-    parser = argparse.ArgumentParser(description='Super Math Trading System')
+    parser = argparse.ArgumentParser(description='Hybrid Trading System - Swing + Positional')
     parser.add_argument('--mode', choices=['once', 'continuous', 'dashboard', 'comparison', 'eod'],
                        default='once', help='Run mode')
     parser.add_argument('--test-discord', action='store_true',
                        help='Test Discord connection')
     parser.add_argument('--summary', action='store_true',
-                       help='Show portfolio summary')
+                       help='Show dual portfolio summary')
     parser.add_argument('--enable-comparison', action='store_true',
                        help='Enable 3-portfolio comparison (EXCELLENT/MODERATE/ALL)')
     parser.add_argument('--eod-top-n', type=int, default=100,
                        help='Number of top stocks to save from EOD scan (default: 100)')
-    parser.add_argument('--eod-tier', choices=['tier1', 'tier2', 'tier3', 'tier4', 'all'],
-                       default='tier1',
-                       help='EOD tier to load for trading (default: tier1 = Top 50 swing trades)')
 
     args = parser.parse_args()
 
@@ -426,23 +392,8 @@ def main():
 
     # Show summary
     if args.summary:
-        trader = PaperTrader()
-        summary = trader.get_summary()
-
-        print("\n" + "="*60)
-        print("📊 PAPER TRADING SUMMARY")
-        print("="*60)
-        print(f"💼 Portfolio Value: ₹{summary['portfolio_value']:,.0f}")
-        print(f"📈 Total Return: {summary['total_return_percent']:+.2f}%")
-        print(f"💰 Available Cash: ₹{summary['capital']:,.0f}")
-        print(f"📊 Open Positions: {summary['open_positions']}")
-        print(f"🎯 Win Rate: {summary['win_rate']:.1f}%")
-        print(f"📈 Total Trades: {summary['total_trades']}")
-        print(f"✅ Winning Trades: {summary['winning_trades']}")
-        print(f"❌ Losing Trades: {summary['losing_trades']}")
-        print(f"🏆 Best Trade: ₹{summary['best_trade']:+,.0f}")
-        print(f"💔 Worst Trade: ₹{summary['worst_trade']:+,.0f}")
-        print("="*60)
+        dual_portfolio = DualPortfolio()
+        dual_portfolio.print_summary()
         return
 
     # Dashboard mode
@@ -472,13 +423,13 @@ def main():
     # EOD Scan mode
     if args.mode == 'eod':
         print("\n🌙 End-of-Day Scanner Mode")
-        system = TradingSystem(use_eod_stocks=False)  # Don't load EOD stocks when running EOD scan
+        system = TradingSystem()
         system.run_eod_scan(top_n=args.eod_top_n)
         return
 
-    # Initialize system (enable comparison if requested or in comparison mode)
+    # Initialize hybrid system
     enable_comparison = args.enable_comparison or args.mode == 'comparison'
-    system = TradingSystem(enable_comparison=enable_comparison, eod_tier=args.eod_tier)
+    system = TradingSystem(enable_comparison=enable_comparison)
 
     # Run based on mode
     if args.mode == 'once':
