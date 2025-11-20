@@ -298,9 +298,9 @@ class TradingSystem:
         Run HYBRID system continuously - scans ALL stocks for both opportunities
 
         Schedule:
-        - Market hours (9:15 AM - 3:30 PM): Hybrid scan every 5 minutes
+        - Market hours (9:15 AM - 3:30 PM): Hybrid scan every 10 minutes
         - Detects swing + positional setups simultaneously
-        - Position monitoring: Every 3 minutes
+        - Position monitoring: Every 5 minutes
         - Post-market (3:30 PM): Daily summary
         - Night: Sleep until next market open
         """

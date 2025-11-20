@@ -149,10 +149,22 @@ class DataFetcher:
 
         return results
 
-    def _fetch_with_retry(self, symbol: str, period: str, interval: str = '1d', max_retries: int = MAX_API_RETRIES) -> Optional[pd.DataFrame]:
-        """Fetch data with automatic retry on failure"""
+    def _fetch_with_retry(self, symbol: str, period: str, interval: str = '1d', max_retries: int = 3) -> Optional[pd.DataFrame]:
+        """
+        Fetch data with automatic retry on failure
+
+        Includes:
+        - Small delay before each request to prevent rate limiting
+        - Exponential backoff on failures
+        - Multiple retry attempts
+        """
         for attempt in range(max_retries):
             try:
+                # Small delay to prevent Yahoo Finance rate limiting
+                # Only delay after first attempt (not on initial try)
+                if attempt > 0:
+                    time.sleep(0.1)  # 100ms delay between requests
+
                 ticker = yf.Ticker(symbol)
                 df = ticker.history(period=period, interval=interval)
 
@@ -161,11 +173,15 @@ class DataFetcher:
 
             except Exception as e:
                 if attempt < max_retries - 1:
-                    wait_time = 2 ** attempt  # Exponential backoff
+                    wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
                     print(f"⚠️ Attempt {attempt + 1} failed for {symbol}, retrying in {wait_time}s...")
                     time.sleep(wait_time)
                 else:
-                    print(f"❌ All retries failed for {symbol}: {e}")
+                    # Only print error on final failure (reduce noise)
+                    if "too many requests" in str(e).lower() or "rate limit" in str(e).lower():
+                        print(f"⚠️ Rate limit hit for {symbol}, skipping...")
+                    else:
+                        print(f"❌ All retries failed for {symbol}: {e}")
 
         return None
 

@@ -210,16 +210,21 @@ PRE_MARKET_SCAN_TIME = '09:00'
 POST_MARKET_SCAN_TIME = '15:45'
 
 # Scanning Intervals
-SCAN_INTERVAL_MINUTES = 5  # Scan every 5 minutes during market hours
-POSITION_MONITOR_INTERVAL = 3  # Monitor positions every 3 minutes
+SCAN_INTERVAL_MINUTES = 10  # Scan every 10 minutes during market hours (safer for API limits)
+POSITION_MONITOR_INTERVAL = 5  # Monitor positions every 5 minutes
 
 # ═══════════════════════════════════════════════════════════════
 # 💾 DATA & CACHING
 # ═══════════════════════════════════════════════════════════════
 
 CACHE_ENABLED = True
-CACHE_DURATION_MINUTES = 5  # Cache data for 5 minutes
+CACHE_DURATION_MINUTES = 10  # Cache data for 10 minutes (matches scan interval)
 HISTORICAL_DATA_PERIOD = '6mo'  # 6 months historical data
+
+# API Rate Limit Protection
+API_RETRY_ATTEMPTS = 3  # Retry failed API calls 3 times
+API_RETRY_DELAY = 2  # Wait 2 seconds between retries
+API_REQUEST_DELAY = 0.1  # 100ms delay between requests (prevents rate limiting)
 
 DATA_FOLDER = 'data'
 CACHE_FOLDER = 'data/cache'

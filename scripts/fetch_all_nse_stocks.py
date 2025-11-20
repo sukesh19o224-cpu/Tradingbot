@@ -18,7 +18,7 @@ def get_nse_stock_list_from_yfinance():
     We'll scan through known NSE stock symbols
     """
     print("📥 Fetching NSE stock list from Yahoo Finance...")
-    print("⏰ This may take 5-10 minutes...\n")
+    print("⏰ This may take 10-15 minutes (slower = safer for API)...\n")
 
     # Get list from NSE India website (public data)
     # NSE provides equity list in CSV format
@@ -41,8 +41,9 @@ def get_nse_stock_list_from_yfinance():
         # Step 2: Validate stocks with Yahoo Finance (check if they have data)
         print("Step 2: Validating stocks with Yahoo Finance...")
         print("(Testing if each stock has tradeable data)\n")
+        print("🛡️ Using 20 threads + retry logic to avoid API rate limits\n")
 
-        valid_stocks = validate_stocks_parallel(symbols, max_workers=50)
+        valid_stocks = validate_stocks_parallel(symbols, max_workers=20)
 
         print(f"\n✅ VALIDATION COMPLETE!")
         print(f"   Total symbols: {len(symbols)}")
@@ -56,13 +57,18 @@ def get_nse_stock_list_from_yfinance():
         print("\n⚠️ Falling back to manual list of common NSE stocks...")
         return get_fallback_nse_list()
 
-def validate_stocks_parallel(symbols, max_workers=50):
-    """Validate stocks in parallel for speed"""
+def validate_stocks_parallel(symbols, max_workers=20):
+    """
+    Validate stocks in parallel with rate limit protection
+
+    Uses reduced thread count (20) and retry logic to avoid API bans
+    """
     valid_stocks = []
     total = len(symbols)
     completed = 0
 
     print(f"Testing {total} stocks with {max_workers} parallel threads...")
+    print(f"🛡️ Rate limit protection: 100ms delay + 3 retries per stock\n")
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_symbol = {executor.submit(validate_stock, symbol): symbol for symbol in symbols}
@@ -76,29 +82,45 @@ def validate_stocks_parallel(symbols, max_workers=50):
                 if is_valid:
                     valid_stocks.append(symbol)
 
-                # Progress indicator
-                if completed % 100 == 0:
-                    print(f"   Progress: {completed}/{total} ({len(valid_stocks)} valid so far)")
+                # Progress indicator (every 50 stocks)
+                if completed % 50 == 0:
+                    percent = (completed / total) * 100
+                    print(f"   Progress: {completed}/{total} ({percent:.1f}%) - {len(valid_stocks)} valid stocks found")
 
             except Exception as e:
                 pass  # Skip invalid stocks
 
     return valid_stocks
 
-def validate_stock(symbol):
-    """Check if stock has valid data on Yahoo Finance"""
-    try:
-        ticker = yf.Ticker(symbol)
-        # Try to get last 5 days of data
-        hist = ticker.history(period='5d')
+def validate_stock(symbol, max_retries=3):
+    """
+    Check if stock has valid data on Yahoo Finance
 
-        # Valid if has data in last 5 days
-        if len(hist) > 0:
-            return True
-        return False
+    Includes retry logic to handle API rate limits
+    """
+    for attempt in range(max_retries):
+        try:
+            ticker = yf.Ticker(symbol)
+            # Try to get last 5 days of data
+            hist = ticker.history(period='5d')
 
-    except:
-        return False
+            # Add small delay to avoid rate limiting
+            time.sleep(0.1)  # 100ms delay between requests
+
+            # Valid if has data in last 5 days
+            if len(hist) > 0:
+                return True
+            return False
+
+        except Exception as e:
+            # If rate limited or network error, retry after delay
+            if attempt < max_retries - 1:
+                wait_time = (attempt + 1) * 2  # Exponential backoff: 2s, 4s, 6s
+                time.sleep(wait_time)
+            else:
+                return False  # Failed after all retries
+
+    return False
 
 def get_fallback_nse_list():
     """
