@@ -18,7 +18,6 @@ from src.strategies.signal_generator import SignalGenerator
 from src.strategies.multitimeframe_analyzer import MultiTimeframeAnalyzer
 from src.paper_trading.dual_portfolio import DualPortfolio
 from src.alerts.discord_alerts import DiscordAlerts
-from src.comparison.portfolio_comparison import PortfolioComparison
 
 IST = pytz.timezone('Asia/Kolkata')
 
@@ -34,7 +33,7 @@ class TradingSystem:
     - Never misses opportunities!
     """
 
-    def __init__(self, enable_comparison=False):
+    def __init__(self):
         print("🚀 Initializing HYBRID Trading System...")
         print("   🔥 Swing Trading + 📈 Positional Trading")
 
@@ -52,10 +51,6 @@ class TradingSystem:
         self.mtf_analyzer = MultiTimeframeAnalyzer()
         self.nse_fetcher = NSEStockFetcher()
 
-        # Portfolio comparison (for live strategy testing)
-        self.enable_comparison = enable_comparison
-        self.portfolio_comparison = PortfolioComparison() if enable_comparison else None
-
         # Scan ALL verified NSE stocks (no tier selection needed!)
         self.watchlist = self.nse_fetcher.fetch_nse_stocks()
 
@@ -71,9 +66,6 @@ class TradingSystem:
         print(f"   📈 Positional Portfolio: ₹{INITIAL_CAPITAL * 0.40:,.0f} (40%)")
         print(f"   💰 Total Capital: ₹{INITIAL_CAPITAL:,.0f}")
         print(f"📱 Discord Alerts: {'Enabled' if self.discord.enabled else 'Disabled'}")
-        if enable_comparison:
-            print(f"🎯 Portfolio Comparison: ENABLED (3 strategies)")
-            print(f"   📊 A: EXCELLENT (≥8.5) | B: MODERATE (≥8.0) | C: ALL (≥7.0)")
 
     def run_scan(self) -> Dict:
         """
@@ -370,14 +362,12 @@ class TradingSystem:
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(description='Hybrid Trading System - Swing + Positional')
-    parser.add_argument('--mode', choices=['once', 'continuous', 'dashboard', 'comparison', 'eod'],
+    parser.add_argument('--mode', choices=['once', 'continuous', 'eod'],
                        default='once', help='Run mode')
     parser.add_argument('--test-discord', action='store_true',
                        help='Test Discord connection')
     parser.add_argument('--summary', action='store_true',
                        help='Show dual portfolio summary')
-    parser.add_argument('--enable-comparison', action='store_true',
-                       help='Enable 3-portfolio comparison (EXCELLENT/MODERATE/ALL)')
     parser.add_argument('--eod-top-n', type=int, default=100,
                        help='Number of top stocks to save from EOD scan (default: 100)')
 
@@ -396,30 +386,6 @@ def main():
         dual_portfolio.print_summary()
         return
 
-    # Dashboard mode
-    if args.mode == 'dashboard':
-        print("\n🚀 Starting Streamlit Dashboard...")
-        print(f"🌐 Open browser to: http://localhost:{DASHBOARD_PORT}")
-        import subprocess
-        subprocess.run(['streamlit', 'run', 'dashboard.py',
-                       '--server.port', str(DASHBOARD_PORT),
-                       '--server.headless', 'true'])
-        return
-
-    # Comparison Dashboard mode
-    if args.mode == 'comparison':
-        print("\n🎯 Starting Strategy Comparison Dashboard...")
-        print(f"🌐 Open browser to: http://localhost:{DASHBOARD_PORT + 1}")
-        print("\n📊 Comparing 3 strategies:")
-        print("   🟢 EXCELLENT: Score ≥ 8.5")
-        print("   🟡 MODERATE: Score ≥ 8.0")
-        print("   🔵 ALL SIGNALS: Score ≥ 7.0")
-        import subprocess
-        subprocess.run(['streamlit', 'run', 'comparison_dashboard.py',
-                       '--server.port', str(DASHBOARD_PORT + 1),
-                       '--server.headless', 'true'])
-        return
-
     # EOD Scan mode
     if args.mode == 'eod':
         print("\n🌙 End-of-Day Scanner Mode")
@@ -428,8 +394,7 @@ def main():
         return
 
     # Initialize hybrid system
-    enable_comparison = args.enable_comparison or args.mode == 'comparison'
-    system = TradingSystem(enable_comparison=enable_comparison)
+    system = TradingSystem()
 
     # Run based on mode
     if args.mode == 'once':
@@ -437,9 +402,7 @@ def main():
         system.run_once()
 
     elif args.mode == 'continuous':
-        print("\n🔄 Running continuous mode...")
-        if enable_comparison:
-            print("📊 Portfolio comparison enabled - tracking 3 strategies simultaneously")
+        print("\n🔄 Running continuous hybrid mode...")
         print("Press Ctrl+C to stop")
         system.run_continuous()
 
