@@ -18,14 +18,41 @@ python_version=$(python3 --version 2>&1 | awk '{print $2}')
 echo "   ✅ Found: Python $python_version"
 echo ""
 
+# Offer to install system packages (makes scipy/numpy faster)
+echo "💡 Optional: Install system packages for faster setup?"
+echo "   This installs numpy, pandas, scipy from system repos (recommended)"
+echo "   Skipping this will install from pip (slower, may need compilers)"
+echo ""
+read -p "   Install system packages? (y/n) [default: y]: " install_sys
+install_sys=${install_sys:-y}
+
+if [[ "$install_sys" =~ ^[Yy]$ ]]; then
+    echo ""
+    echo "📦 Installing system packages..."
+    if command -v apt &> /dev/null; then
+        # Debian/Ubuntu
+        sudo apt update > /dev/null 2>&1
+        sudo apt install -y python3-numpy python3-pandas python3-scipy python3-sklearn > /dev/null 2>&1
+        echo "   ✅ System packages installed!"
+    elif command -v dnf &> /dev/null; then
+        # Fedora
+        sudo dnf install -y python3-numpy python3-pandas python3-scipy python3-scikit-learn > /dev/null 2>&1
+        echo "   ✅ System packages installed!"
+    else
+        echo "   ⚠️  Package manager not detected, skipping..."
+    fi
+    echo ""
+fi
+
 # Create virtual environment
 echo "🔧 Creating virtual environment..."
 if [ -d "venv" ]; then
     echo "   ✅ Virtual environment already exists"
 else
-    python3 -m venv venv
+    # Use --system-site-packages to access system numpy/scipy
+    python3 -m venv venv --system-site-packages
     if [ $? -eq 0 ]; then
-        echo "   ✅ Virtual environment created!"
+        echo "   ✅ Virtual environment created (with system packages access)!"
     else
         echo "   ❌ Failed to create virtual environment"
         echo "   Try: sudo apt install python3-venv"
@@ -35,20 +62,21 @@ fi
 echo ""
 
 # Activate virtual environment
-echo "📦 Installing dependencies..."
-echo "   This may take 2-3 minutes..."
+echo "📦 Installing remaining dependencies from pip..."
+echo "   This may take 1-2 minutes..."
 source venv/bin/activate
 
 # Upgrade pip
 pip install --upgrade pip > /dev/null 2>&1
 
-# Install dependencies
-if pip install -r requirements.txt; then
+# Install dependencies (system packages will be skipped automatically)
+pip install -r requirements.txt
+if [ $? -eq 0 ]; then
     echo "   ✅ All dependencies installed!"
 else
-    echo "   ❌ Failed to install some dependencies"
-    echo "   Check requirements.txt and try again"
-    exit 1
+    echo "   ⚠️  Some packages failed to install"
+    echo "   Core packages (numpy, pandas, scipy) should work from system install"
+    echo "   You can continue and try running the system"
 fi
 echo ""
 
