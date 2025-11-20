@@ -66,27 +66,92 @@ class EODScanner:
         print(f"   • Valid signals: {len(valid_signals)} stocks")
         print(f"   • Top {top_n} selected for tomorrow")
 
-        # Get top stocks
-        top_stocks = valid_signals[:top_n]
+        # Get tiered rankings (Top 50, 100, 250, 500)
+        tier1_top50 = valid_signals[:50]   # Best of the best - Swing trading
+        tier2_top100 = valid_signals[:100]  # Swing + Positional
+        tier3_top250 = valid_signals[:250]  # Positional trading
+        tier4_top500 = valid_signals[:500]  # All viable trades
 
-        # Display top 10
-        print(f"\n🏆 TOP 10 STOCKS FOR TOMORROW:")
-        for i, signal in enumerate(top_stocks[:10], 1):
+        # Display tiered rankings
+        print(f"\n🏆 TIERED RANKINGS FOR TOMORROW:")
+        print(f"\n   📊 TIER 1 - TOP 50 (Swing Trading - Aggressive)")
+        print(f"      • Count: {len(tier1_top50)}")
+        print(f"      • Avg Score: {sum(s['score'] for s in tier1_top50[:50])/len(tier1_top50[:50]):.1f}/10" if tier1_top50 else "      • No stocks")
+        print(f"      • Strategy: Short-term momentum + quick profits")
+
+        print(f"\n   📈 TIER 2 - TOP 100 (Swing + Positional)")
+        print(f"      • Count: {len(tier2_top100)}")
+        print(f"      • Avg Score: {sum(s['score'] for s in tier2_top100[:100])/len(tier2_top100[:100]):.1f}/10" if tier2_top100 else "      • No stocks")
+        print(f"      • Strategy: Mixed approach")
+
+        print(f"\n   📉 TIER 3 - TOP 250 (Positional Trading)")
+        print(f"      • Count: {len(tier3_top250)}")
+        print(f"      • Avg Score: {sum(s['score'] for s in tier3_top250[:250])/len(tier3_top250[:250]):.1f}/10" if tier3_top250 else "      • No stocks")
+        print(f"      • Strategy: Medium-term trend following")
+
+        print(f"\n   🔍 TIER 4 - TOP 500 (All Viable)")
+        print(f"      • Count: {len(tier4_top500)}")
+        print(f"      • Avg Score: {sum(s['score'] for s in tier4_top500[:500])/len(tier4_top500[:500]):.1f}/10" if tier4_top500 else "      • No stocks")
+        print(f"      • Strategy: Conservative long-term")
+
+        # Display top 10 from Tier 1 (best trades)
+        print(f"\n🌟 TOP 10 STOCKS FROM TIER 1 (BEST SWING TRADES):")
+        for i, signal in enumerate(tier1_top50[:10], 1):
             print(f"   {i}. {signal['symbol']} - Score: {signal['score']:.1f}/10 ({signal['trade_type']})")
             print(f"      Entry: ₹{signal['entry_price']:.2f} | Target: ₹{signal['target2']:.2f} (+{((signal['target2']/signal['entry_price']-1)*100):.1f}%)")
 
-        # Save results
+        # Save results with tiered structure
         results = {
             'scan_date': datetime.now().isoformat(),
             'total_scanned': len(all_stocks),
             'valid_signals': len(valid_signals),
-            'top_stocks': [s['symbol'] for s in top_stocks],
-            'top_signals': top_stocks,
+
+            # Tiered rankings
+            'tiers': {
+                'tier1_top50': {
+                    'symbols': [s['symbol'] for s in tier1_top50],
+                    'signals': tier1_top50,
+                    'count': len(tier1_top50),
+                    'strategy': 'swing_trading',
+                    'description': 'Best quality - aggressive swing trades',
+                },
+                'tier2_top100': {
+                    'symbols': [s['symbol'] for s in tier2_top100],
+                    'signals': tier2_top100,
+                    'count': len(tier2_top100),
+                    'strategy': 'swing_and_positional',
+                    'description': 'Good quality - mixed approach',
+                },
+                'tier3_top250': {
+                    'symbols': [s['symbol'] for s in tier3_top250],
+                    'signals': tier3_top250,
+                    'count': len(tier3_top250),
+                    'strategy': 'positional_trading',
+                    'description': 'Medium quality - positional trades',
+                },
+                'tier4_top500': {
+                    'symbols': [s['symbol'] for s in tier4_top500],
+                    'signals': tier4_top500,
+                    'count': len(tier4_top500),
+                    'strategy': 'conservative_longterm',
+                    'description': 'All viable - conservative approach',
+                },
+            },
+
+            # Legacy format (for backward compatibility)
+            'top_stocks': [s['symbol'] for s in tier1_top50],  # Default to Tier 1
+            'top_signals': tier1_top50,
             'all_signals': valid_signals[:200],  # Save top 200
+
+            # Stats
             'stats': {
                 'excellent': len([s for s in valid_signals if s['score'] >= 8.5]),
                 'good': len([s for s in valid_signals if 8.0 <= s['score'] < 8.5]),
                 'moderate': len([s for s in valid_signals if 7.0 <= s['score'] < 8.0]),
+                'tier1_count': len(tier1_top50),
+                'tier2_count': len(tier2_top100),
+                'tier3_count': len(tier3_top250),
+                'tier4_count': len(tier4_top500),
             }
         }
 
@@ -170,9 +235,12 @@ class EODScanner:
         except Exception as e:
             return None
 
-    def get_top_stocks_for_today(self) -> List[str]:
+    def get_top_stocks_for_today(self, tier: str = 'tier1') -> List[str]:
         """
-        Get top stocks from yesterday's EOD scan
+        Get top stocks from yesterday's EOD scan by tier
+
+        Args:
+            tier: Which tier to load ('tier1', 'tier2', 'tier3', 'tier4', or 'all')
 
         Returns:
             List of stock symbols to scan today
@@ -191,10 +259,32 @@ class EODScanner:
             if age_days > 1:
                 print(f"⚠️  EOD scan is {age_days} days old. Consider running fresh scan.")
 
-            top_stocks = results.get('top_stocks', [])
-            print(f"📊 Loaded {len(top_stocks)} stocks from EOD scan ({scan_date.strftime('%d %b %Y')})")
+            # Load from tiered structure
+            if 'tiers' in results:
+                if tier == 'all':
+                    # Combine all tiers
+                    all_stocks = []
+                    for tier_key in ['tier1_top50', 'tier2_top100', 'tier3_top250', 'tier4_top500']:
+                        all_stocks.extend(results['tiers'].get(tier_key, {}).get('symbols', []))
+                    stocks = list(set(all_stocks))  # Remove duplicates
+                elif tier == 'tier1':
+                    stocks = results['tiers'].get('tier1_top50', {}).get('symbols', [])
+                elif tier == 'tier2':
+                    stocks = results['tiers'].get('tier2_top100', {}).get('symbols', [])
+                elif tier == 'tier3':
+                    stocks = results['tiers'].get('tier3_top250', {}).get('symbols', [])
+                elif tier == 'tier4':
+                    stocks = results['tiers'].get('tier4_top500', {}).get('symbols', [])
+                else:
+                    stocks = results['tiers'].get('tier1_top50', {}).get('symbols', [])
+            else:
+                # Legacy format
+                stocks = results.get('top_stocks', [])
 
-            return top_stocks
+            tier_name = tier.upper().replace('TIER', 'TIER ')
+            print(f"📊 Loaded {len(stocks)} stocks from {tier_name} ({scan_date.strftime('%d %b %Y')})")
+
+            return stocks
 
         except Exception as e:
             print(f"⚠️  Error loading EOD results: {e}")

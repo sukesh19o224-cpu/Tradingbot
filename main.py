@@ -35,7 +35,7 @@ class TradingSystem:
     - Manage daily operations
     """
 
-    def __init__(self, enable_comparison=False, use_eod_stocks=True):
+    def __init__(self, enable_comparison=False, use_eod_stocks=True, eod_tier='tier1'):
         print("🚀 Initializing Super Math Trading System...")
 
         self.data_fetcher = DataFetcher()
@@ -53,12 +53,22 @@ class TradingSystem:
         self.enable_comparison = enable_comparison
         self.portfolio_comparison = PortfolioComparison() if enable_comparison else None
 
-        # Try to load top stocks from EOD scan
+        # Try to load top stocks from EOD scan (with tier selection)
+        self.eod_tier = eod_tier  # Store for later use
         if use_eod_stocks:
-            eod_stocks = self.eod_scanner.get_top_stocks_for_today()
+            eod_stocks = self.eod_scanner.get_top_stocks_for_today(tier=eod_tier)
             if eod_stocks:
                 self.watchlist = eod_stocks
-                print(f"📊 Using EOD scan results: {len(self.watchlist)} top stocks")
+                tier_names = {
+                    'tier1': 'TIER 1 - TOP 50 (Swing Trading)',
+                    'tier2': 'TIER 2 - TOP 100 (Swing + Positional)',
+                    'tier3': 'TIER 3 - TOP 250 (Positional)',
+                    'tier4': 'TIER 4 - TOP 500 (All Viable)',
+                    'all': 'ALL TIERS'
+                }
+                tier_name = tier_names.get(eod_tier, eod_tier.upper())
+                print(f"📊 Using EOD scan: {tier_name}")
+                print(f"   • {len(self.watchlist)} stocks loaded")
             else:
                 self.watchlist = DEFAULT_WATCHLIST
                 print(f"⚠️  No EOD scan found, using default watchlist")
@@ -231,35 +241,43 @@ class TradingSystem:
 
     def run_continuous(self):
         """
-        Run system continuously during market hours
+        Run system continuously during market hours with automatic EOD scan
 
         Schedule:
-        - Pre-market scan: 9:00 AM
-        - Market scans: Every SCAN_INTERVAL_MINUTES
+        - Pre-market: Wait for 9:15 AM
+        - Market hours (9:15 AM - 3:30 PM): Scan every SCAN_INTERVAL_MINUTES
         - Position monitoring: Every 3 minutes
-        - Post-market summary: 3:45 PM
+        - Post-market (3:30 PM): Daily summary
+        - EOD scan (4:00 PM): Automatic full NSE scan for next day
+        - Night: Sleep until next market open
         """
-        print("\n🔄 Starting continuous mode...")
+        print("\n🔄 Starting FULLY AUTOMATIC continuous mode...")
         print(f"⏰ Market Hours: {MARKET_OPEN_TIME} - {MARKET_CLOSE_TIME} IST")
-        print(f"🔍 Scan Interval: {SCAN_INTERVAL_MINUTES} minutes")
+        print(f"🔍 Intraday Scan: Every {SCAN_INTERVAL_MINUTES} minutes")
         print(f"📊 Position Monitor: Every {POSITION_MONITOR_INTERVAL} minutes")
+        print(f"🌙 EOD Scan: 4:00 PM IST (automatic)")
+        print(f"✨ FULLY AUTOMATIC: Just run once, system handles everything!")
 
         self.is_running = True
         last_scan_time = None
         last_monitor_time = None
+        eod_scan_done_today = False  # Track if EOD scan completed today
 
         try:
             while self.is_running:
                 current_time = datetime.now(IST).time()
+                current_date = datetime.now(IST).date()
 
-                # Check if market is open
+                # Market hours
                 market_open = dt_time(9, 15)
                 market_close = dt_time(15, 30)
+                eod_scan_time = dt_time(16, 0)  # 4:00 PM for EOD scan
 
                 if market_open <= current_time <= market_close:
-                    # Market hours - run scans and monitoring
+                    # MARKET HOURS - Intraday scanning and monitoring
+                    print(f"\n🟢 Market OPEN - Active trading mode")
 
-                    # Run scan
+                    # Run intraday scan
                     if (last_scan_time is None or
                         (datetime.now() - last_scan_time).seconds >= SCAN_INTERVAL_MINUTES * 60):
 
@@ -274,26 +292,57 @@ class TradingSystem:
                         self.monitor_positions()
                         last_monitor_time = datetime.now()
 
-                else:
-                    # Market closed
-                    if current_time > market_close:
-                        # Post-market
-                        print(f"\n🌙 Market closed. Next scan at {MARKET_OPEN_TIME} IST tomorrow.")
+                    # Small sleep to prevent CPU overuse
+                    time.sleep(10)
 
-                        # Send daily summary (once per day)
-                        if last_scan_time and last_scan_time.date() == datetime.now().date():
-                            self.send_daily_summary()
-                            last_scan_time = None  # Reset for next day
+                elif market_close < current_time < dt_time(22, 0):
+                    # POST-MARKET (3:30 PM - 10:00 PM)
 
-                        # Sleep until next market open
-                        time.sleep(3600)  # 1 hour
+                    # Daily summary (once per day, right after market close)
+                    if last_scan_time and last_scan_time.date() == current_date:
+                        print(f"\n🌆 Market CLOSED - Generating daily summary...")
+                        self.send_daily_summary()
+                        last_scan_time = None  # Reset for next day
+
+                    # Automatic EOD scan at 4:00 PM (once per day)
+                    if current_time >= eod_scan_time and not eod_scan_done_today:
+                        print(f"\n🌙 EOD SCAN TIME - Running automatic full NSE scan...")
+                        print(f"⏰ {self._get_ist_time()}")
+                        print(f"📊 This will scan ALL verified NSE stocks and rank them for tomorrow")
+                        print(f"⏱️  Expected time: 5-10 minutes\n")
+
+                        try:
+                            # Run full EOD scan (automatic, no prompt)
+                            self.run_eod_scan(top_n=500, auto=True)
+                            eod_scan_done_today = True
+                            print(f"\n✅ EOD scan completed! Top stocks ranked for tomorrow.")
+                            print(f"   • TIER 1: Top 50 (Swing Trading)")
+                            print(f"   • TIER 2: Top 100 (Swing + Positional)")
+                            print(f"   • TIER 3: Top 250 (Positional)")
+                            print(f"   • TIER 4: Top 500 (All Viable)")
+
+                        except Exception as e:
+                            print(f"\n⚠️  EOD scan failed: {e}")
+                            print(f"   Will retry tomorrow at 4:00 PM")
+
+                    if eod_scan_done_today:
+                        print(f"\n💤 EOD scan complete. Sleeping until tomorrow's market open...")
                     else:
-                        # Pre-market
-                        print(f"\n🌅 Pre-market. Waiting for market open at {MARKET_OPEN_TIME} IST...")
-                        time.sleep(300)  # 5 minutes
+                        print(f"\n⏳ Waiting for EOD scan time (4:00 PM)...")
 
-                # Small sleep to prevent CPU overuse
-                time.sleep(10)
+                    # Sleep for 30 minutes
+                    time.sleep(1800)
+
+                else:
+                    # NIGHT TIME (10:00 PM - 9:15 AM)
+                    print(f"\n🌙 Night mode - Sleeping until market open tomorrow...")
+                    print(f"⏰ Next market open: {MARKET_OPEN_TIME} IST")
+
+                    # Reset EOD scan flag for next day
+                    eod_scan_done_today = False
+
+                    # Sleep for 1 hour
+                    time.sleep(3600)
 
         except KeyboardInterrupt:
             print("\n\n⏹️ Stopping system...")
@@ -305,7 +354,7 @@ class TradingSystem:
         self.process_signals(signals)
         self.monitor_positions()
 
-    def run_eod_scan(self, top_n: int = 100):
+    def run_eod_scan(self, top_n: int = 100, auto: bool = False):
         """
         Run End-of-Day scan on all NSE stocks
 
@@ -314,23 +363,25 @@ class TradingSystem:
 
         Args:
             top_n: Number of top stocks to save for tomorrow
+            auto: If True, skip confirmation prompt (for automatic runs)
         """
         print("\n" + "="*70)
         print("🌙 END-OF-DAY SCANNER")
         print("="*70)
         print(f"⏰ Best time to run: After 3:30 PM IST (market close)")
-        print(f"📊 Will scan: ALL NSE stocks (~500 stocks)")
+        print(f"📊 Will scan: ALL NSE stocks (~600-800 verified stocks)")
         print(f"⏱️  Expected time: 5-10 minutes")
-        print(f"💾 Will save: Top {top_n} stocks for tomorrow")
+        print(f"💾 Will save: Top {top_n} stocks ranked in 4 tiers")
         print("="*70)
 
-        # Confirm
-        print("\nThis will scan all NSE stocks and may take some time.")
-        response = input("Continue? (y/n) [default: y]: ").strip().lower() or 'y'
+        # Confirm (skip if automatic)
+        if not auto:
+            print("\nThis will scan all NSE stocks and may take some time.")
+            response = input("Continue? (y/n) [default: y]: ").strip().lower() or 'y'
 
-        if response != 'y':
-            print("❌ EOD scan cancelled")
-            return
+            if response != 'y':
+                print("❌ EOD scan cancelled")
+                return
 
         # Run EOD scan
         results = self.eod_scanner.run_eod_scan(top_n=top_n)
@@ -362,6 +413,9 @@ def main():
                        help='Enable 3-portfolio comparison (EXCELLENT/MODERATE/ALL)')
     parser.add_argument('--eod-top-n', type=int, default=100,
                        help='Number of top stocks to save from EOD scan (default: 100)')
+    parser.add_argument('--eod-tier', choices=['tier1', 'tier2', 'tier3', 'tier4', 'all'],
+                       default='tier1',
+                       help='EOD tier to load for trading (default: tier1 = Top 50 swing trades)')
 
     args = parser.parse_args()
 
@@ -426,7 +480,7 @@ def main():
 
     # Initialize system (enable comparison if requested or in comparison mode)
     enable_comparison = args.enable_comparison or args.mode == 'comparison'
-    system = TradingSystem(enable_comparison=enable_comparison)
+    system = TradingSystem(enable_comparison=enable_comparison, eod_tier=args.eod_tier)
 
     # Run based on mode
     if args.mode == 'once':

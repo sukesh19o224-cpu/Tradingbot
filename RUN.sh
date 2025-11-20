@@ -19,13 +19,15 @@ show_menu() {
     echo "Choose what to run:"
     echo ""
     echo "  1) 🎯 Single Scan           - Run one scan cycle"
-    echo "  2) 🔄 Live Mode             - Run continuously (recommended)"
-    echo "  3) 🌙 EOD Scanner           - Scan all NSE stocks (after market close)"
+    echo "  2) ✨ AUTOMATIC Mode        - Fully automatic! (RECOMMENDED)"
+    echo "  3) 🌙 EOD Scanner           - Manual EOD scan (for testing)"
     echo "  4) 📊 Dashboard             - Open main dashboard"
     echo "  5) 🎯 Comparison Mode       - Test 3 strategies"
     echo "  6) 📈 Show Summary          - View current performance"
     echo "  7) 🧪 Test Discord          - Test Discord alerts"
     echo "  8) ❌ Exit"
+    echo ""
+    echo "💡 NEW: Option 2 = Fully automatic! EOD scan at 4 PM daily"
     echo ""
 }
 
@@ -38,20 +40,62 @@ run_single_scan() {
 
 run_live_mode() {
     echo ""
-    echo "🔄 Starting live continuous mode..."
+    echo "╔══════════════════════════════════════════════════════════╗"
+    echo "║     🔄 FULLY AUTOMATIC CONTINUOUS MODE                  ║"
+    echo "╚══════════════════════════════════════════════════════════╝"
     echo ""
-    echo "📌 System will:"
-    echo "   • Use top stocks from EOD scan (if available)"
-    echo "   • Scan stocks every 5 minutes with 15-minute + daily candles"
+    echo "✨ FULLY AUTOMATIC SYSTEM - Just run once!"
+    echo ""
+    echo "📌 System will AUTOMATICALLY:"
+    echo "   • Morning (9:15 AM): Load top stocks from yesterday's EOD scan"
+    echo "   • Market hours: Scan every 5 minutes (Daily + 15-min candles)"
     echo "   • Generate signals and send Discord alerts"
-    echo "   • Execute paper trades automatically"
-    echo "   • Monitor positions for exits"
-    echo "   • Run during market hours (9:15 AM - 3:30 PM IST)"
+    echo "   • Execute paper trades and monitor positions"
+    echo "   • 3:30 PM: Generate daily summary"
+    echo "   • 4:00 PM: Run automatic EOD scan of ALL NSE stocks"
+    echo "   • Rank top 500 stocks in 4 tiers for next day"
+    echo "   • Sleep until next market open"
     echo ""
+    echo "🎯 Which tier of stocks to trade?"
+    echo "   TIER 1: Top 50  (Best swing trades - aggressive)"
+    echo "   TIER 2: Top 100 (Swing + positional - balanced)"
+    echo "   TIER 3: Top 250 (Positional - medium-term)"
+    echo "   TIER 4: Top 500 (All viable - conservative)"
+    echo ""
+    read -p "Enter tier (1-4) [default: 1]: " tier_choice
+    tier_choice=${tier_choice:-1}
+
+    case $tier_choice in
+        1)
+            tier="tier1"
+            tier_name="TIER 1 - TOP 50 (Swing Trading)"
+            ;;
+        2)
+            tier="tier2"
+            tier_name="TIER 2 - TOP 100 (Swing + Positional)"
+            ;;
+        3)
+            tier="tier3"
+            tier_name="TIER 3 - TOP 250 (Positional)"
+            ;;
+        4)
+            tier="tier4"
+            tier_name="TIER 4 - TOP 500 (All Viable)"
+            ;;
+        *)
+            tier="tier1"
+            tier_name="TIER 1 - TOP 50 (Swing Trading)"
+            ;;
+    esac
+
+    echo ""
+    echo "🚀 Starting fully automatic mode with $tier_name"
+    echo ""
+    echo "✨ Just leave it running - it handles everything!"
     echo "Press Ctrl+C to stop"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    python3 main.py --mode continuous
+    python3 main.py --mode continuous --eod-tier $tier
 }
 
 run_eod_scan() {
@@ -61,38 +105,44 @@ run_eod_scan() {
     echo "╚══════════════════════════════════════════════════════════╝"
     echo ""
     echo "⏰ Best time: After 3:30 PM IST (market close)"
-    echo "📊 Scans: ALL NSE stocks (~500 stocks)"
+    echo "📊 Scans: ALL NSE verified stocks (~600-800 stocks)"
     echo "⏱️  Time needed: 5-10 minutes"
-    echo "💾 Saves: Top 100 stocks for tomorrow"
     echo ""
     echo "📈 This scan ranks all NSE stocks by signal quality"
-    echo "   Tomorrow's live scan will focus on these top stocks"
+    echo "   Results saved in 4 TIERS for different trading styles:"
+    echo "   • TIER 1: Top 50  (Swing trading - aggressive)"
+    echo "   • TIER 2: Top 100 (Swing + positional - balanced)"
+    echo "   • TIER 3: Top 250 (Positional - medium-term)"
+    echo "   • TIER 4: Top 500 (All viable - conservative)"
     echo ""
-    echo "How many top stocks to save?"
-    echo "  1) Top 50  (conservative)"
-    echo "  2) Top 100 (recommended)"
-    echo "  3) Top 150 (aggressive)"
+    echo "💡 Note: In automatic mode, EOD scan runs automatically at 4 PM"
+    echo "   This manual option is for testing or re-running scans"
+    echo ""
+    echo "How many top stocks to rank?"
+    echo "  1) Top 250 (faster - good for testing)"
+    echo "  2) Top 500 (recommended - full ranking)"
+    echo "  3) Top 750 (comprehensive)"
     echo ""
     read -p "Enter choice (1-3) [default: 2]: " eod_choice
     eod_choice=${eod_choice:-2}
 
     case $eod_choice in
         1)
-            top_n=50
+            top_n=250
             ;;
         2)
-            top_n=100
+            top_n=500
             ;;
         3)
-            top_n=150
+            top_n=750
             ;;
         *)
-            top_n=100
+            top_n=500
             ;;
     esac
 
     echo ""
-    echo "🚀 Starting EOD scan (top $top_n stocks will be saved)..."
+    echo "🚀 Starting EOD scan (top $top_n stocks in 4 tiers)..."
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     python3 main.py --mode eod --eod-top-n $top_n
