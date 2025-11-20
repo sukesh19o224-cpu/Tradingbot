@@ -106,9 +106,18 @@ class TradingSystem:
             print("\n⚠️ No signals to process")
             return
 
-        print(f"\n📋 Processing Signals...")
-        print(f"   🔥 Swing: {len(swing_signals)} signals")
-        print(f"   📈 Positional: {len(positional_signals)} signals")
+        # CRITICAL FIX #4: Limit signals to top quality only
+        # Filter to MIN_SIGNAL_SCORE and take top N by score
+        swing_signals = [s for s in swing_signals if s.get('score', 0) >= MIN_SIGNAL_SCORE]
+        positional_signals = [s for s in positional_signals if s.get('score', 0) >= MIN_SIGNAL_SCORE]
+
+        # Sort by score (descending) and take top N
+        swing_signals = sorted(swing_signals, key=lambda x: x.get('score', 0), reverse=True)[:MAX_SWING_SIGNALS_PER_SCAN]
+        positional_signals = sorted(positional_signals, key=lambda x: x.get('score', 0), reverse=True)[:MAX_POSITIONAL_SIGNALS_PER_SCAN]
+
+        print(f"\n📋 Processing Signals (Top Quality Only)...")
+        print(f"   🔥 Swing: {len(swing_signals)} signals (filtered)")
+        print(f"   📈 Positional: {len(positional_signals)} signals (filtered)")
 
         # Process swing signals → Swing portfolio
         for signal in swing_signals:
@@ -155,6 +164,56 @@ class TradingSystem:
 
         if not swing_positions and not positional_positions:
             return
+
+        # CRITICAL FIX #5: Market Circuit Breaker
+        # Exit all positions if NIFTY crashes >2%
+        try:
+            nifty_price = self.data_fetcher.get_current_price(NIFTY_SYMBOL)
+            if nifty_price > 0:
+                # Get NIFTY's opening price (or previous close)
+                import yfinance as yf
+                nifty_data = yf.Ticker(NIFTY_SYMBOL).history(period='1d', interval='1d')
+                if not nifty_data.empty:
+                    nifty_open = nifty_data['Open'].iloc[-1]
+                    nifty_change_pct = (nifty_price - nifty_open) / nifty_open
+
+                    if nifty_change_pct <= MARKET_CRASH_THRESHOLD:
+                        print(f"\n🚨 MARKET CIRCUIT BREAKER TRIGGERED!")
+                        print(f"   NIFTY 50: {nifty_change_pct*100:.2f}% (Threshold: {MARKET_CRASH_THRESHOLD*100:.1f}%)")
+                        print(f"   🚪 Exiting ALL positions for capital preservation...")
+
+                        # Exit all swing positions
+                        if swing_positions:
+                            current_prices = {}
+                            for symbol in swing_positions.keys():
+                                price = self.data_fetcher.get_current_price(symbol)
+                                if price > 0:
+                                    current_prices[symbol] = price
+
+                            for symbol in list(swing_positions.keys()):
+                                if symbol in current_prices:
+                                    self.dual_portfolio.swing_portfolio._exit_position(
+                                        symbol, current_prices[symbol], 'MARKET_CRASH_PROTECTION', full_exit=True
+                                    )
+
+                        # Exit all positional positions
+                        if positional_positions:
+                            current_prices = {}
+                            for symbol in positional_positions.keys():
+                                price = self.data_fetcher.get_current_price(symbol)
+                                if price > 0:
+                                    current_prices[symbol] = price
+
+                            for symbol in list(positional_positions.keys()):
+                                if symbol in current_prices:
+                                    self.dual_portfolio.positional_portfolio._exit_position(
+                                        symbol, current_prices[symbol], 'MARKET_CRASH_PROTECTION', full_exit=True
+                                    )
+
+                        print(f"   ✅ All positions exited - Capital preserved")
+                        return  # Skip normal monitoring
+        except Exception as e:
+            print(f"   ⚠️ Circuit breaker check failed: {e}")
 
         # Monitor swing positions (more frequently)
         if swing_positions:

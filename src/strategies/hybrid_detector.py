@@ -8,6 +8,8 @@ import numpy as np
 from typing import Dict, Optional, Tuple
 from datetime import datetime
 
+from config.settings import SWING_STOP_LOSS, POSITIONAL_STOP_LOSS
+
 
 class HybridDetector:
     """
@@ -220,8 +222,8 @@ class HybridDetector:
         target2 = entry_price * 1.08  # 8%
         target3 = entry_price * 1.10  # 10%
 
-        # Tighter stop loss: 2-3%
-        stop_loss = entry_price * 0.97  # 3% stop
+        # CRITICAL FIX #9: Use settings.py values instead of hardcoded
+        stop_loss = entry_price * (1 - SWING_STOP_LOSS)
 
         # Calculate risk-reward
         risk = entry_price - stop_loss
@@ -265,8 +267,8 @@ class HybridDetector:
         target2 = entry_price * 1.22  # 22%
         target3 = entry_price * 1.30  # 30%
 
-        # Wider stop loss: 5-7%
-        stop_loss = entry_price * 0.94  # 6% stop
+        # CRITICAL FIX #9: Use settings.py values instead of hardcoded
+        stop_loss = entry_price * (1 - POSITIONAL_STOP_LOSS)
 
         # Calculate risk-reward
         risk = entry_price - stop_loss

@@ -30,6 +30,12 @@ MAX_POSITIONS = 10  # Maximum concurrent positions
 MAX_POSITION_SIZE = 0.25  # 25% max per position
 MAX_SECTOR_EXPOSURE = 0.40  # 40% max per sector
 
+# Market Circuit Breaker (Exit all positions if market crashes)
+MARKET_CRASH_THRESHOLD = -0.02  # -2% - Exit all if NIFTY down >2%
+NIFTY_SYMBOL = "^NSEI"  # NIFTY 50 index symbol
+TRAILING_STOP_ACTIVATION = 0.05  # Activate trailing stop at +5%
+TRAILING_STOP_DISTANCE = 0.03  # Trail by 3%
+
 # Stop Loss & Targets
 SWING_STOP_LOSS = 0.02  # 2% stop loss for swing
 POSITIONAL_STOP_LOSS = 0.05  # 5% stop loss for positional
@@ -108,6 +114,10 @@ ML_FEATURES = [
 # Scoring System (0-10)
 MIN_SIGNAL_SCORE = 7.0  # Minimum score to generate alert
 HIGH_QUALITY_SCORE = 8.5  # High quality signal threshold
+
+# Signal Filtering (Prevent signal flood)
+MAX_SWING_SIGNALS_PER_SCAN = 5  # Max swing signals to process per scan
+MAX_POSITIONAL_SIGNALS_PER_SCAN = 3  # Max positional signals to process per scan
 
 # Signal Weights
 WEIGHTS = {

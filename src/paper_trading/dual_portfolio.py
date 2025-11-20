@@ -58,6 +58,12 @@ class DualPortfolio:
         Returns:
             True if executed successfully
         """
+        # CRITICAL FIX #2: Check cross-portfolio duplicates
+        symbol = signal['symbol']
+        if symbol in self.positional_portfolio.positions:
+            print(f"⚠️ {symbol} already in positional portfolio, skipping swing signal")
+            return False
+
         # Add strategy tag
         signal['strategy'] = 'swing'
         return self.swing_portfolio.execute_signal(signal)
@@ -72,6 +78,12 @@ class DualPortfolio:
         Returns:
             True if executed successfully
         """
+        # CRITICAL FIX #2: Check cross-portfolio duplicates
+        symbol = signal['symbol']
+        if symbol in self.swing_portfolio.positions:
+            print(f"⚠️ {symbol} already in swing portfolio, skipping positional signal")
+            return False
+
         # Add strategy tag
         signal['strategy'] = 'positional'
         return self.positional_portfolio.execute_signal(signal)
