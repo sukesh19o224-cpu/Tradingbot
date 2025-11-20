@@ -1,525 +1,746 @@
-# 🚀 Multi-Strategy Trading System V4.0
+# 🚀 SUPER MATH TRADING SYSTEM
 
-**An automated trading system for Indian stock market (NSE) with regime detection and multi-strategy support.**
+**Maximum Realistic Profit with Advanced Mathematical Models**
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+An intelligent hybrid swing & positional trading system for Indian stock market (NSE) that combines:
+- 📊 **Technical Analysis** (RSI, MACD, EMA, Bollinger Bands, ADX)
+- 🔬 **Mathematical Models** (Fibonacci, Elliott Wave, Gann Theory)
+- 🤖 **Machine Learning** (LSTM Price Predictions)
+- 📄 **Auto Paper Trading** (Test with virtual money)
+- 💬 **Discord Alerts** (Real-time notifications)
+- 📈 **Live Dashboard** (Streamlit web interface)
 
-## 📊 Features
+---
 
-### Core Features
-- **🎯 Multi-Strategy System**: Momentum, Mean Reversion, and Breakout strategies
-- **🔄 Automatic Regime Detection**: Adapts strategy allocation based on market conditions
-- **💰 Dynamic Capital Allocation**: Smart capital reallocation between strategies
-- **🛡️ Advanced Risk Management**: Per-trade risk limits, drawdown protection, position sizing
-- **📊 Real-time Portfolio Tracking**: GUI and CLI interfaces
-- **📢 Discord Alerts**: Real-time trade notifications
-- **💾 Data Caching**: Optimized scanning (3-5 min → 30 sec)
+## 🎯 What Makes This System "SUPER"?
 
-### V4.0 New Features
-- ✅ Comprehensive logging system
-- ✅ Error handling with automatic retries
-- ✅ SQLite database for trade history
-- ✅ Health monitoring and alerts
-- ✅ Automatic portfolio backups
-- ✅ Configuration validation
+### **1. SUPER MATHEMATICAL**
+- **Fibonacci Retracements & Extensions** - Golden ratio price levels
+- **Elliott Wave Theory** - 5-wave impulse pattern detection
+- **Gann Angles & Square of 9** - Geometric price-time relationships
+- **Support & Resistance** - Multi-touch level identification
 
-## 🎯 Target Performance
+### **2. SUPER PHILOSOPHICAL**
+Markets are **fractal** and **cyclical**. This system captures the underlying mathematical structure of price movements by combining:
+- Classical geometry (Fibonacci, Gann)
+- Wave theory (Elliott)
+- Modern pattern recognition (ML)
+- Rigorous risk management (Kelly Criterion)
 
-- **Monthly Returns**: 8-12%
-- **Win Rate**: 55-65%
-- **Max Drawdown**: <15%
-- **Risk per Trade**: 1.5%
+### **3. SUPER REALISTIC**
+**Target Returns:**
+- Conservative: 15-25% annually
+- Aggressive: 25-40% annually
+- Monthly: 1.5-3% average
 
-## 📋 Prerequisites
+**Based on:**
+- Professional trader benchmarks
+- Academic research on algo trading
+- Realistic backtesting assumptions
 
-- Python 3.8 or higher
-- Active internet connection for market data
-- (Optional) Discord webhook for alerts
+---
 
-## 🚀 Quick Start
+## 📊 System Architecture
 
-### 1. Installation
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    SUPER MATH SYSTEM                        │
+└─────────────────────────────────────────────────────────────┘
+                            │
+          ┌─────────────────┼─────────────────┐
+          │                 │                 │
+    ┌─────▼─────┐    ┌──────▼──────┐   ┌─────▼─────┐
+    │ Technical │    │Mathematical │   │  Machine  │
+    │ Indicators│    │  Indicators │   │ Learning  │
+    └─────┬─────┘    └──────┬──────┘   └─────┬─────┘
+          │                 │                 │
+          └─────────────────┼─────────────────┘
+                            │
+                    ┌───────▼────────┐
+                    │ Signal Engine  │
+                    │  (0-10 Score)  │
+                    └───────┬────────┘
+                            │
+          ┌─────────────────┼─────────────────┐
+          │                 │                 │
+    ┌─────▼─────┐    ┌──────▼──────┐   ┌─────▼─────┐
+    │  Discord  │    │    Paper    │   │ Dashboard │
+    │   Alert   │    │   Trading   │   │ (Streamlit)│
+    └───────────┘    └─────────────┘   └───────────┘
+```
+
+---
+
+## 🚀 Quick Start (5 Minutes)
+
+### **Step 1: Install Dependencies**
 
 ```bash
-# Clone or download the repository
-cd trading_advisory
-
-# Create virtual environment
-python3 -m venv venv
-
-# Activate virtual environment
-source venv/bin/activate  # Linux/Mac
-# or
-venv\Scripts\activate  # Windows
-
-# Install dependencies
+# Install Python packages
 pip install -r requirements.txt
 ```
 
-### 2. Configuration
+### **Step 2: Configure Discord (Optional but Recommended)**
 
-Create a `.env` file in the project root:
+1. Go to your Discord server
+2. **Server Settings** → **Integrations** → **Webhooks**
+3. Click **New Webhook**
+4. Copy the webhook URL
+5. Create `.env` file:
 
 ```bash
-# Discord webhook for alerts (optional)
+cp .env.example .env
+```
+
+6. Edit `.env` and paste your webhook URL:
+
+```env
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_WEBHOOK_HERE
 ```
 
+### **Step 3: Test Discord (Optional)**
+
+```bash
+python main.py --test-discord
+```
+
+You should see a test message in your Discord channel!
+
+### **Step 4: Run Your First Scan**
+
+```bash
+python main.py --mode once
+```
+
+This will:
+- ✅ Scan 30 NSE stocks
+- ✅ Generate high-probability signals (score ≥ 7/10)
+- ✅ Auto-execute trades in paper portfolio
+- ✅ Send Discord alerts
+- ✅ Display results in terminal
+
+### **Step 5: Open Dashboard**
+
+```bash
+python main.py --mode dashboard
+```
+
+Then open: **http://localhost:8501**
+
+You'll see:
+- 📊 Real-time portfolio value
+- 📈 Open positions with live P&L
+- 📜 Trade history
+- 🎯 Performance charts
+
+---
+
+## 📖 Usage Modes
+
+### **1. Single Scan (Manual Trading)**
+
+```bash
+python main.py --mode once
+```
+
+**Use this for:**
+- Manual trading (you execute based on alerts)
+- Testing the system
+- Quick market checks
+- Running scans on-demand
+
+**What happens:**
+- Scans all stocks
+- Generates signals
+- Auto paper trading
+- Sends Discord alerts
+- **You manually trade in your broker**
+
+### **2. Continuous Mode (Auto Paper Trading)**
+
+```bash
+python main.py --mode continuous
+```
+
+**Use this for:**
+- Full paper trading automation
+- Testing strategy over time
+- Running 24/7 during market hours
+
+**What happens:**
+- Scans every 5 minutes during market hours (9:15 AM - 3:30 PM IST)
+- Auto-generates signals
+- Auto-executes paper trades
+- Monitors positions every 3 minutes
+- Checks targets & stop loss
+- Sends Discord alerts for all trades
+- Daily summary at market close
+
+**Press Ctrl+C to stop**
+
+### **3. Dashboard Mode (Monitoring)**
+
+```bash
+python main.py --mode dashboard
+```
+
+**Use this for:**
+- Real-time portfolio monitoring
+- Performance tracking
+- Visualizing trades
+- Understanding system behavior
+
+**Opens:** http://localhost:8501
+
+### **4. Portfolio Summary**
+
+```bash
+python main.py --summary
+```
+
+Shows:
+- Portfolio value
+- Total return %
+- Win rate
+- Trade statistics
+- Best/worst trades
+
+---
+
+## 🎯 Signal Generation System
+
+### **Scoring System (0-10)**
+
+Signals are generated only if **Score ≥ 7.0**
+
+**Score Composition:**
+- **Technical Analysis: 40%**
+  - EMA trends
+  - RSI momentum
+  - MACD crossovers
+  - Bollinger Bands
+  - ADX trend strength
+  - Volume analysis
+
+- **Mathematical Models: 30%**
+  - Fibonacci retracements
+  - Elliott Wave patterns
+  - Gann levels
+  - Support & Resistance
+
+- **Machine Learning: 20%**
+  - LSTM price predictions
+  - Confidence scoring
+  - Momentum analysis
+
+- **Volume: 10%**
+  - Volume surges
+  - OBV (On-Balance Volume)
+
+### **Example Signal**
+
+```
+🔔 BUY SIGNAL - RELIANCE.NS
+
+📊 Score: 8.5/10 🔥
+💰 Entry: ₹2,456.50
+🎯 Targets:
+   T1: ₹2,530 (+3%)
+   T2: ₹2,654 (+8%)
+   T3: ₹2,751 (+12%)
+⛔ Stop Loss: ₹2,407 (-2%)
+
+📈 Technical Score: 8.2/10
+🔬 Mathematical Score: 8.8/10
+🤖 ML Prediction: +7.5% (78% confidence)
+
+📊 Analysis:
+   - RSI: 55 (Bullish zone)
+   - MACD: Bullish crossover
+   - Price above EMA(50)
+   - Fibonacci: Bouncing from 61.8%
+   - Elliott Wave: Wave 3 forming
+   - Volume: 1.8x average
+
+🎯 Recommended Hold: 7 days (SWING)
+⚠️ Risk Level: LOW
+```
+
+---
+
+## 📊 Trading Strategies
+
+### **Swing Trading (3-15 days)**
+
+**Criteria:**
+- Short-term momentum
+- RSI 50-75
+- MACD bullish crossover
+- Price bouncing from support
+- Recent price action
+
+**Targets:** 3%, 8%, 12%
+**Stop Loss:** 2%
+
+### **Positional Trading (weeks to months)**
+
+**Criteria:**
+- Strong long-term trend
+- Price above EMA(100) & EMA(200)
+- ADX > 30 (strong trend)
+- Elliott Wave impulse pattern
+- ML predicts >10% return
+
+**Targets:** 12%, 20%, 30%
+**Stop Loss:** 5%
+
+---
+
+## ⚙️ Configuration
+
 Edit `config/settings.py` to customize:
-- Initial capital
-- Risk parameters
-- Strategy settings
-- Market timing
 
-### 3. Run the System
-
-```bash
-# Activate virtual environment
-source venv/bin/activate
-
-# Run main system
-python main_with_news.py
-```
-
-### 4. First-Time Setup
-
-When you run the system for the first time:
-
-1. Configuration will be validated automatically
-2. Required directories will be created
-3. Portfolio will be initialized with your `INITIAL_CAPITAL`
-4. Database tables will be set up
-
-### 5. Usage Modes
-
-The system offers two modes:
-
-#### Manual Mode (Default)
-Interactive menu with options:
-- Run EOD screening
-- Scan for opportunities
-- View portfolio
-- Monitor positions
-- Start auto mode
-
-#### Full Auto Mode
-Automated trading:
-- Morning checks at 9:15 & 9:45 AM
-- Live scanning every 10 minutes
-- Position monitoring every 3 minutes
-- EOD scan at 3:45 PM
-
-```bash
-# In manual mode, select option 10 to start auto mode
-```
-
-## 📁 Project Structure
-
-```
-trading_advisory/
-├── main_with_news.py          # Main entry point
-├── config/
-│   └── settings.py            # Configuration file
-├── src/
-│   ├── core/                  # Core system
-│   │   ├── multi_strategy_manager.py
-│   │   └── dynamic_capital_allocator.py
-│   ├── strategies/            # Trading strategies
-│   │   ├── momentum_strategy.py
-│   │   ├── mean_reversion_strategy.py
-│   │   └── breakout_strategy.py
-│   ├── portfolio_manager/     # Portfolio management
-│   │   └── portfolio_manager.py
-│   ├── risk_guardian/         # Risk management
-│   │   └── risk_manager.py
-│   ├── analyzers/             # Market analysis
-│   │   ├── regime_detector.py
-│   │   ├── sector_tracker.py
-│   │   └── correlation_checker.py
-│   ├── data_collector/        # Data fetching
-│   │   ├── data_cache.py
-│   │   └── eod_manager.py
-│   ├── alert_dispatcher/      # Notifications
-│   │   └── discord_alerts.py
-│   ├── backtest/              # Backtesting
-│   │   └── backtester.py
-│   └── utils/                 # Utilities (NEW)
-│       ├── logger.py          # Logging system
-│       ├── error_handler.py   # Error handling
-│       ├── database.py        # Database operations
-│       ├── health_monitor.py  # Health monitoring
-│       └── config_validator.py # Config validation
-├── data/
-│   ├── portfolio.json         # Current portfolio
-│   ├── backups/              # Auto backups
-│   └── cache/                # Data cache
-├── database/
-│   └── trading.db            # SQLite database
-└── logs/                     # System logs
-```
-
-## 🎯 Strategies
-
-### 1. Momentum Strategy
-**Best for**: Trending/bull markets
-
-**Entry Criteria**:
-- 5-day momentum > 3%
-- 20-day momentum > 5%
-- Volume 1.5x above average
-- Price above MA20 and MA50
-
-**Targets**: 5%, 8%, 12%  
-**Stop Loss**: 7%
-
-### 2. Mean Reversion Strategy
-**Best for**: Choppy/ranging markets
-
-**Entry Criteria**:
-- Price 2-5% below MA20
-- RSI < 35 (oversold)
-- Above MA50 (quality filter)
-- Support bounce confirmation
-
-**Targets**: 3%, 5%, 8%  
-**Stop Loss**: 5%
-
-### 3. Breakout Strategy
-**Best for**: Consolidation periods
-
-**Entry Criteria**:
-- 5+ days consolidation
-- Range within 5%
-- Volume surge 2x on breakout
-- ATR expansion
-
-**Targets**: 6%, 10%, 15%  
-**Stop Loss**: 6%
-
-## 📊 Risk Management
-
-### Position Sizing
-- **Risk per trade**: 1.5% of capital
-- **Max per stock**: 25% of capital
-- **Max positions**: 15 concurrent positions
-
-### Stop Losses
-- Fixed percentage stops (5-7% depending on strategy)
-- Trailing stops after profit (starts at +2%)
-- Time stops (3-5 days depending on strategy)
-
-### Portfolio Protection
-- **Max daily loss**: 6% (halts trading)
-- **Max drawdown**: 15% (pauses trading for 24h)
-- **Sector limits**: Max 40% in single sector
-- **Correlation check**: Rejects if >70% correlated with existing positions
-
-## 📈 Performance Tracking
-
-### View Performance
+### **Risk Management**
 
 ```python
-# In manual mode, select:
-# 4. View Portfolio - Current holdings and P&L
-# 5. View Strategy Performance - Per-strategy breakdown
-# 6. View Risk Status - Risk metrics
+KELLY_FRACTION = 0.25  # Use 1/4 Kelly (conservative)
+MAX_RISK_PER_TRADE = 0.02  # 2% max risk per trade
+MAX_POSITIONS = 10  # Maximum concurrent positions
+MAX_POSITION_SIZE = 0.25  # 25% max per position
 ```
 
-### Database Queries
+### **Signal Thresholds**
 
 ```python
-from src.utils.database import get_database
-
-db = get_database()
-
-# Get last 30 days performance
-metrics = db.get_performance_metrics(days=30)
-print(f"Win Rate: {metrics['win_rate']:.1f}%")
-print(f"Total P&L: ₹{metrics['total_pnl']:,.0f}")
-
-# Get strategy breakdown
-strategy_perf = db.get_strategy_performance(days=30)
-for strat in strategy_perf:
-    print(f"{strat['strategy']}: {strat['win_rate']:.1f}% win rate")
+MIN_SIGNAL_SCORE = 7.0  # Minimum score to generate alert
+HIGH_QUALITY_SCORE = 8.5  # High quality (triggers @everyone)
 ```
 
-## 🔧 Configuration Guide
-
-### Quick Tuning
-
-**For MORE opportunities**:
-```python
-# In config/settings.py
-MIN_SCORE = 30  # Lower from 35
-MOMENTUM['MIN_5D_MOMENTUM'] = 2.0  # Lower from 3.0
-MAX_POSITIONS = 20  # Increase from 15
-```
-
-**For BETTER quality (fewer trades)**:
-```python
-MIN_SCORE = 45  # Raise from 35
-MOMENTUM['MIN_5D_MOMENTUM'] = 4.0  # Raise from 3.0
-MAX_POSITIONS = 10  # Decrease from 15
-```
-
-**For more AGGRESSIVE**:
-```python
-MAX_RISK_PER_TRADE = 0.02  # 2% from 1.5%
-STOP_LOSS_PERCENT = 0.08  # 8% from 6%
-```
-
-**For more CONSERVATIVE**:
-```python
-MAX_RISK_PER_TRADE = 0.01  # 1% from 1.5%
-STOP_LOSS_PERCENT = 0.05  # 5% from 6%
-MAX_POSITIONS = 5  # Decrease from 15
-```
-
-### Risk Profiles
-
-The system includes three pre-configured risk profiles in `src/utils/config_validator.py`:
-
-- **CONSERVATIVE**: 1% risk, 5 positions, 5% stops
-- **MODERATE**: 1.5% risk, 10 positions, 6% stops
-- **AGGRESSIVE**: 2% risk, 15 positions, 7% stops
-
-## 🏥 Monitoring & Maintenance
-
-### Health Check
+### **Scanning**
 
 ```python
-from src.utils.health_monitor import get_health_monitor
-
-monitor = get_health_monitor()
-monitor.display_health_status()
+SCAN_INTERVAL_MINUTES = 5  # How often to scan
+POSITION_MONITOR_INTERVAL = 3  # Position check frequency
 ```
 
-### Backups
-
-Automatic backups are created:
-- Before each portfolio save
-- Keeps last 30 backups
-- Located in `data/backups/`
-
-To restore from backup:
-```python
-from src.utils.health_monitor import get_backup_manager
-
-backup_mgr = get_backup_manager()
-backup_mgr.list_backups()  # View available backups
-backup_mgr.restore_latest_backup()  # Restore latest
-```
-
-### Logs
-
-Logs are automatically created in `logs/` directory:
-- Daily log files with rotation
-- Max 10MB per file
-- Keeps last 10 files
-- Format: `trading_YYYYMMDD.log`
-
-## 🧪 Backtesting
-
-Run backtest on historical data:
+### **Stock Universe**
 
 ```python
-from src.backtest.backtester import MultiStrategyBacktester
-
-backtester = MultiStrategyBacktester(initial_capital=100000)
-
-# Define test stocks
-test_stocks = ['RELIANCE.NS', 'TCS.NS', 'INFY.NS', 'HDFCBANK.NS']
-
-# Run backtest
-results = backtester.run_backtest(
-    start_date='2024-01-01',
-    end_date='2024-12-31',
-    test_stocks=test_stocks
-)
-
-# View results
-print(results['multi_strategy']['total_return'])
+DEFAULT_WATCHLIST = [
+    'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS',
+    'INFY.NS', 'HINDUNILVR.NS', 'ICICIBANK.NS',
+    # ... 30 stocks total
+]
 ```
+
+**Customize your watchlist** in `config/settings.py`
+
+---
 
 ## 📱 Discord Alerts
 
-### Setup
+### **Alert Types**
 
-1. Create a Discord webhook:
-   - Open Discord server settings
-   - Go to Integrations → Webhooks
-   - Create webhook and copy URL
+1. **🟢 BUY SIGNAL**
+   - Complete trade plan
+   - Entry, targets, stop loss
+   - Technical & mathematical analysis
+   - ML predictions
+   - Risk metrics
 
-2. Add to `.env` file:
-   ```
-   DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_WEBHOOK_HERE
-   ```
+2. **🔴 EXIT SIGNAL**
+   - Profit/Loss
+   - Exit reason (target hit, stop loss, etc.)
+   - Return percentage
 
-3. Test:
-   ```python
-   from src.alert_dispatcher.discord_alerts import DiscordAlerts
-   
-   alerter = DiscordAlerts()
-   alerter.send_test_alert()
-   ```
+3. **📊 DAILY SUMMARY**
+   - Portfolio value
+   - Daily return
+   - Win rate
+   - Trade count
 
-### Alert Types
+### **Mention @everyone**
 
-- 🟢 **BUY**: New position entered
-- 🔴 **SELL**: Position exited (with reason and P&L)
-- 📊 **SCAN**: Scan summary with opportunities found
-- ⚠️ **RISK**: Risk alerts (max loss, drawdown)
-
-## 🛡️ Error Handling
-
-The system includes robust error handling:
-
-### Automatic Retries
-API calls automatically retry 3 times with exponential backoff:
-```python
-from src.utils.error_handler import retry_on_failure
-
-@retry_on_failure(max_retries=3, delay=2)
-def fetch_data(symbol):
-    return yf.Ticker(symbol).history(period='1mo')
-```
-
-### Error Tracking
-All errors are logged and tracked:
-```python
-from src.utils.error_handler import get_error_tracker
-
-tracker = get_error_tracker()
-summary = tracker.get_summary()
-print(f"Errors last hour: {summary['total_errors_last_hour']}")
-```
-
-## ⚙️ Advanced Features
-
-### Custom Strategy
-
-Create your own strategy by inheriting from base strategy:
+High-quality signals (score ≥ 8.5) will mention @everyone if enabled:
 
 ```python
-from src.strategies.momentum_strategy import MomentumStrategy
-
-class MyStrategy(MomentumStrategy):
-    def __init__(self):
-        super().__init__()
-        self.name = "MY_STRATEGY"
-    
-    def analyze_stock(self, symbol_ns):
-        # Your custom logic
-        pass
+DISCORD_MENTION_ON_HIGH_SCORE = True
 ```
 
-### Data Caching
+---
 
-Caching speeds up scans from 3-5 minutes to 30 seconds:
+## 📈 Dashboard Features
+
+**Real-time Monitoring:**
+- Portfolio value & P&L
+- Open positions with live prices
+- Trade history
+- Performance charts
+- Strategy breakdown
+
+**Auto-refresh:** Dashboard refreshes every 60 seconds (configurable)
+
+**Access:** http://localhost:8501
+
+---
+
+## 📄 Paper Trading
+
+### **What is Paper Trading?**
+
+Paper trading = **trading with fake money** to test strategies without risk.
+
+### **Features**
+
+- ✅ Auto-executes all generated signals
+- ✅ Tracks performance in real-time
+- ✅ Position management (targets & stop loss)
+- ✅ Kelly Criterion position sizing
+- ✅ Realistic slippage simulation
+- ✅ Full trade history
+
+### **Portfolio File**
+
+Located at: `data/paper_portfolio.json`
+
+**Never deleted** - tracks all your paper trading history!
+
+### **Reset Paper Portfolio**
+
 ```python
-from src.data_collector.data_cache import get_cache
+from src.paper_trading.paper_trader import PaperTrader
 
-cache = get_cache()
-df = cache.get_data(
-    'RELIANCE.NS',
-    lambda: yf.Ticker('RELIANCE.NS').history(period='3mo')
-)
+trader = PaperTrader()
+trader.reset()
 ```
 
-## 🐛 Troubleshooting
+---
 
-### Common Issues
+## 🧪 Testing Individual Components
 
-**1. "No data from yfinance"**
+### **Test Technical Indicators**
+
+```bash
+python src/indicators/technical_indicators.py
+```
+
+### **Test Mathematical Indicators**
+
+```bash
+python src/indicators/mathematical_indicators.py
+```
+
+### **Test ML Predictor**
+
+```bash
+python src/ml_models/lstm_predictor.py
+```
+
+### **Test Data Fetcher**
+
+```bash
+python src/data/data_fetcher.py
+```
+
+### **Test Signal Generator**
+
+```bash
+python src/strategies/signal_generator.py
+```
+
+---
+
+## 📚 Project Structure
+
+```
+TraDc/
+├── main.py                 # Main application
+├── dashboard.py            # Streamlit dashboard
+├── requirements.txt        # Dependencies
+├── .env                    # Your configuration
+├── config/
+│   └── settings.py         # All settings
+├── src/
+│   ├── indicators/
+│   │   ├── technical_indicators.py    # RSI, MACD, EMA, etc.
+│   │   └── mathematical_indicators.py # Fibonacci, Elliott, Gann
+│   ├── ml_models/
+│   │   └── lstm_predictor.py         # ML predictions
+│   ├── strategies/
+│   │   └── signal_generator.py       # Signal engine
+│   ├── paper_trading/
+│   │   └── paper_trader.py           # Paper trading
+│   ├── alerts/
+│   │   └── discord_alerts.py         # Discord notifications
+│   └── data/
+│       └── data_fetcher.py           # Stock data fetcher
+├── data/
+│   ├── paper_portfolio.json          # Paper trading portfolio
+│   └── cache/                        # Data cache
+└── logs/                              # System logs
+```
+
+---
+
+## 🎓 How It Works (Simplified)
+
+### **1. Data Collection**
+
+```
+Yahoo Finance → Data Fetcher → Cache (5 min)
+```
+
+Fetches 6 months of historical data for all stocks in watchlist.
+
+### **2. Analysis**
+
+```
+Historical Data → Technical Indicators → Score (0-10)
+                → Mathematical Indicators → Score (0-10)
+                → ML Predictor → Score (0-10)
+                           ↓
+                    Combined Score
+                     (weighted avg)
+```
+
+### **3. Signal Generation**
+
+```
+IF Combined Score >= 7.0:
+    → Generate BUY signal
+    → Calculate targets & stop loss
+    → Determine trade type (swing/positional)
+```
+
+### **4. Execution**
+
+```
+Signal → Paper Trader → Execute (virtual money)
+      → Discord Alert → YOU see notification
+                     → YOU decide to trade manually
+```
+
+### **5. Monitoring**
+
+```
+Every 3 minutes:
+    Check current prices
+    IF price >= target OR price <= stop_loss:
+        → Exit position (paper)
+        → Send Discord alert
+```
+
+---
+
+## 💡 Trading Workflow (Recommended)
+
+### **Daily Routine:**
+
+**9:00 AM** - Pre-market
+- Review overnight news
+- Check global markets
+
+**9:15 AM** - Market open
+- System runs first scan
+- Receives Discord alerts
+- Review signals
+
+**9:30 AM - 3:30 PM** - During market
+- Monitor Discord for new signals
+- Check dashboard periodically
+- Place manual trades based on alerts
+
+**3:45 PM** - Market close
+- Review daily summary on Discord
+- Check paper trading performance
+- Plan for tomorrow
+
+### **Weekly Review:**
+
+```bash
+python main.py --summary
+```
+
+- Review win rate
+- Analyze losing trades
+- Adjust settings if needed
+- Compare your manual trades vs paper trading
+
+---
+
+## ⚠️ Important Notes
+
+### **This System DOES:**
+
+✅ Generate high-probability trading signals
+✅ Auto paper trade for testing
+✅ Send real-time Discord alerts
+✅ Calculate optimal position sizes
+✅ Monitor and manage paper positions
+✅ Track performance accurately
+
+### **This System DOES NOT:**
+
+❌ Execute real trades in your broker
+❌ Access your broker account
+❌ Guarantee profits
+❌ Replace your judgment
+
+**YOU decide** when to place real trades based on the alerts!
+
+---
+
+## 🔧 Troubleshooting
+
+### **"No signals found"**
+
+- **Solution 1:** Lower `MIN_SIGNAL_SCORE` in `config/settings.py`
+- **Solution 2:** Increase watchlist size
+- **Solution 3:** Market might be in sideways consolidation
+
+### **"Discord alerts not working"**
+
+- Check webhook URL in `.env`
+- Test with: `python main.py --test-discord`
+- Verify Discord channel permissions
+
+### **"No data fetched"**
+
 - Check internet connection
-- Verify symbol format (should end with .NS)
-- yfinance may have temporary issues, retry later
+- Yahoo Finance might be down (retry later)
+- Try clearing cache: delete `data/cache/` folder
 
-**2. "Portfolio file corrupted"**
-```python
-from src.utils.health_monitor import get_backup_manager
-backup_mgr = get_backup_manager()
-backup_mgr.restore_latest_backup()
+### **"ModuleNotFoundError"**
+
+```bash
+pip install -r requirements.txt
 ```
 
-**3. "Discord alerts not working"**
-- Verify webhook URL in `.env`
-- Check Discord server permissions
-- Test with: `alerter.send_test_alert()`
+### **"TensorFlow warnings"**
 
-**4. "High API error rate"**
-- Reduce scan frequency in settings
-- Check yfinance service status
-- Review error logs in `logs/` directory
+- Safe to ignore (ML uses statistical methods if TensorFlow unavailable)
+- Or install TensorFlow: `pip install tensorflow`
 
-### Debug Mode
+---
 
-Enable detailed logging:
-```python
-from src.utils.logger import get_logger
+## 📊 Performance Metrics
 
-logger = get_logger()
-logger.logger.setLevel(logging.DEBUG)
-```
+The system tracks:
 
-## 📊 Performance Tips
+- **Sharpe Ratio**: Risk-adjusted returns (Target: >2.0)
+- **Maximum Drawdown**: Largest loss from peak (Target: <15%)
+- **Win Rate**: % of profitable trades (Target: >55%)
+- **Profit Factor**: Gross profit / Gross loss (Target: >2.0)
+- **Average Win**: Average profit per winning trade
+- **Average Loss**: Average loss per losing trade
+- **R:R Ratio**: Reward-to-Risk ratio per trade
 
-1. **Start Conservative**: Use lower risk settings initially
-2. **Monitor First Week**: Watch without taking all trades
-3. **Gradual Scaling**: Increase position sizes as you gain confidence
-4. **Daily Review**: Check portfolio and logs daily
-5. **Weekly Analysis**: Review strategy performance weekly
-6. **Monthly Optimization**: Adjust settings based on monthly results
+View anytime: `python main.py --summary`
 
-## 🔒 Security
+---
 
-- Never commit `.env` file to version control
-- Keep Discord webhooks private
-- Regularly backup portfolio data
-- Review trade history for unusual activity
+## 🎯 Expected Performance (Paper Trading)
 
-## 📚 Additional Resources
+**Conservative Estimate:**
+- **Monthly Return:** 1.5-2.5%
+- **Annual Return:** 18-30%
+- **Win Rate:** 55-60%
+- **Max Drawdown:** 10-15%
 
-- **Yahoo Finance**: Data source
-- **NSE India**: Market holidays and trading hours
-- **Discord**: Alert notifications
+**With good market conditions:**
+- **Monthly Return:** 2.5-3.5%
+- **Annual Return:** 30-40%
+- **Win Rate:** 60-65%
+- **Max Drawdown:** 8-12%
 
-## 🤝 Contributing
+**Realistic timeline:**
+- **Month 1-2:** Learning period, 5-15% returns
+- **Month 3-6:** Strategy optimization, 15-25% returns
+- **Month 6+:** Consistent performance, 20-35% annual
 
-Contributions are welcome! Areas for improvement:
-- Additional strategies
-- Machine learning integration
-- Real-time data feeds (NSE API)
-- Options strategies
-- Better UI/dashboard
+---
+
+## 🚀 Next Steps
+
+### **Phase 1: Testing (Week 1-2)**
+- Run daily scans
+- Monitor Discord alerts
+- Compare signals with market
+- NO real money yet
+
+### **Phase 2: Paper Trading (Week 3-4)**
+- Run continuous mode
+- Let paper portfolio build history
+- Analyze performance
+- Identify winning patterns
+
+### **Phase 3: Small Real Trades (Month 2)**
+- Start with 10% of capital
+- Only trade high-score signals (≥8.5)
+- Stick to risk management rules
+- Build confidence
+
+### **Phase 4: Scaling (Month 3+)**
+- Gradually increase position sizes
+- Optimize settings based on results
+- Consider adding more stocks
+- Refine your personal strategy
+
+---
+
+## 🤝 Support
+
+**Questions?**
+1. Check this README thoroughly
+2. Review `config/settings.py` comments
+3. Test individual components
+4. Check logs in `logs/` folder
+
+**Feature Requests?**
+This is your system - customize it in `config/settings.py`!
+
+---
 
 ## ⚠️ Disclaimer
 
-**This software is for educational purposes only. Use at your own risk.**
+**FOR EDUCATIONAL PURPOSES ONLY**
 
 - Past performance does not guarantee future results
 - Trading involves risk of loss
 - Test thoroughly with paper trading first
+- The author is not responsible for any financial losses
 - Consult a financial advisor before trading
-- Author is not responsible for any financial losses
-
-## 📄 License
-
-MIT License - see LICENSE file for details
-
-## 🙋 Support
-
-For issues or questions:
-1. Check logs in `logs/` directory
-2. Review configuration with validator
-3. Check health status
-4. Review this documentation
+- This is not financial advice
 
 ---
 
-**Version**: 4.0  
-**Last Updated**: November 2025  
-**Status**: Production Ready ✅
+## 📄 License
 
-Happy Trading! 🚀📈
+MIT License - Use at your own risk
+
+---
+
+## 🎉 You're Ready!
+
+Start your journey to systematic trading:
+
+```bash
+# Test Discord
+python main.py --test-discord
+
+# Run first scan
+python main.py --mode once
+
+# Open dashboard
+python main.py --mode dashboard
+```
+
+**Happy Trading! 🚀📈**
+
+*Remember: The best trader is a patient, disciplined, and systematic trader.*
+
+---
+
+**Version:** 1.0
+**Last Updated:** November 2025
+**Status:** Production Ready ✅
