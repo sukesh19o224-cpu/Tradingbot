@@ -8,6 +8,7 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional
 import warnings
 warnings.filterwarnings('ignore')
+import yfinance as yf
 
 from config.settings import *
 
@@ -423,8 +424,6 @@ class MathematicalIndicators:
 
 def test_mathematical_indicators():
     """Test the mathematical indicators module"""
-    import yfinance as yf
-
     print("🧪 Testing Mathematical Indicators...")
 
     # Fetch sample data

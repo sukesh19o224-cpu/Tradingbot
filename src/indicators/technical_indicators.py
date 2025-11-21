@@ -8,6 +8,7 @@ import numpy as np
 from typing import Dict, Tuple
 import warnings
 warnings.filterwarnings('ignore')
+import yfinance as yf
 
 from config.settings import *
 
@@ -284,8 +285,6 @@ class TechnicalIndicators:
 
 def test_indicators():
     """Test the technical indicators module"""
-    import yfinance as yf
-
     print("🧪 Testing Technical Indicators...")
 
     # Fetch sample data

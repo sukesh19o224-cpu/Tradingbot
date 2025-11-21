@@ -8,6 +8,7 @@ import numpy as np
 from typing import Dict, Tuple
 import warnings
 warnings.filterwarnings('ignore')
+import yfinance as yf
 
 from config.settings import *
 
@@ -256,8 +257,6 @@ class SentimentAnalyzer:
 
 def test_ml_predictor():
     """Test the ML predictor module"""
-    import yfinance as yf
-
     print("🧪 Testing ML Predictor...")
 
     # Fetch sample data
