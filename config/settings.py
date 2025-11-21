@@ -292,7 +292,7 @@ SECTORS = {
 }
 
 print("✅ Super Math Trading System - Configuration Loaded")
-print(f"📊 Scanning: {len(DEFAULT_WATCHLIST)} stocks")
+print(f"📊 Scanning: Top 50 VERIFIED WORKING stocks")
 print(f"🎯 Min Signal Score: {MIN_SIGNAL_SCORE}/10")
 print(f"💰 Initial Capital: ₹{INITIAL_CAPITAL:,.0f}")
 print(f"📱 Discord Alerts: {'Enabled' if DISCORD_ENABLED else 'Disabled'}")
