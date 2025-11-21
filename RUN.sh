@@ -127,13 +127,54 @@ run_continuous_mode() {
     echo "💼 Portfolio: Swing (60%) + Positional (40%)"
     echo "📊 Success Rate: 97.8% (489/500 stocks)"
     echo ""
-    echo "Press Enter to start, or Ctrl+C to stop anytime"
-    read -p ""
+    echo "Choose mode:"
+    echo "  1) System only (no dashboard)"
+    echo "  2) System + Dashboard (RECOMMENDED)"
     echo ""
-    echo "🚀 Starting CONTINUOUS MODE..."
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo ""
-    python3 main_eod_system.py --mode continuous
+    read -p "Enter choice (1-2): " cont_choice
+
+    case $cont_choice in
+        1)
+            echo ""
+            echo "🚀 Starting CONTINUOUS MODE (System Only)..."
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo ""
+            python3 main_eod_system.py --mode continuous
+            ;;
+        2)
+            echo ""
+            echo "🚀 Starting CONTINUOUS MODE with Dashboard..."
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo ""
+            echo "📊 Dashboard will open in your browser..."
+            echo "🌐 URL: http://localhost:8501"
+            echo ""
+            echo "⚠️  Keep BOTH windows open!"
+            echo "   • Terminal: Trading system"
+            echo "   • Browser: Live dashboard"
+            echo ""
+            echo "Press Enter to start..."
+            read -p ""
+
+            # Start trading system in background
+            python3 main_eod_system.py --mode continuous &
+            SYSTEM_PID=$!
+            echo "   System started (PID: $SYSTEM_PID)"
+            sleep 3
+
+            # Start dashboard (foreground)
+            echo "   Starting dashboard..."
+            streamlit run dashboard.py --server.port=8501 --server.headless=true
+
+            # When dashboard closes, kill system
+            echo ""
+            echo "Stopping trading system..."
+            kill $SYSTEM_PID 2>/dev/null
+            ;;
+        *)
+            echo "❌ Invalid choice"
+            ;;
+    esac
 }
 
 show_summary() {

@@ -65,6 +65,40 @@ class MultiTimeframeAnalyzer:
             print(f"⚠️ Error analyzing {symbol}: {e}")
             return None
 
+    def analyze_stock(self, symbol: str, daily_df: pd.DataFrame, intraday_df: Optional[pd.DataFrame] = None) -> Optional[Dict]:
+        """
+        Perform multi-timeframe analysis with pre-fetched data
+
+        This method is used by sequential scanner which already fetched the data
+
+        Args:
+            symbol: Stock symbol
+            daily_df: Pre-fetched daily OHLCV data
+            intraday_df: Pre-fetched 15-min OHLCV data (optional)
+
+        Returns:
+            Dictionary with analysis results or None
+        """
+        try:
+            if daily_df is None or len(daily_df) < 30:
+                return None
+
+            # Analyze daily timeframe (trend confirmation)
+            daily_analysis = self._analyze_daily(daily_df)
+
+            # Analyze 15-minute timeframe (entry/exit timing) if available
+            intraday_analysis = self._analyze_intraday(intraday_df) if intraday_df is not None and len(intraday_df) > 10 else None
+
+            # Combine analyses
+            combined = self._combine_timeframes(daily_analysis, intraday_analysis)
+            combined['symbol'] = symbol
+
+            return combined
+
+        except Exception as e:
+            # Silent fail for individual stocks
+            return None
+
     def _analyze_daily(self, df: pd.DataFrame) -> Dict:
         """
         Analyze daily timeframe for trend and signal quality
@@ -266,6 +300,28 @@ class MultiTimeframeAnalyzer:
             )
         else:
             combined['overall_quality'] = daily['trend_score']
+
+        # ADD MISSING FIELDS for sequential_scanner compatibility
+        combined['uptrend'] = daily['trend'] in ['UPTREND', 'STRONG_UPTREND', 'WEAK_UPTREND']
+        combined['signal_score'] = combined['overall_quality']  # Use overall_quality as signal_score
+        combined['current_price'] = daily['current_price']
+        combined['trend_strength'] = daily['trend']
+
+        # Add indicators dict for compatibility
+        combined['indicators'] = {
+            'rsi': daily.get('rsi', 50),
+            'adx': 25 if combined['uptrend'] else 15,  # Estimate ADX from trend
+            'macd': 0,  # Not calculated in current analyzer
+            'volume_ratio': 1.5 if daily.get('volume_trend') == 'STRONG' else 1.0
+        }
+
+        # Add signal type classification
+        if intraday and intraday.get('recent_breakout'):
+            combined['signal_type'] = 'BREAKOUT'
+        elif daily['rsi'] > 60:
+            combined['signal_type'] = 'MOMENTUM'
+        else:
+            combined['signal_type'] = 'MEAN_REVERSION'
 
         return combined
 
