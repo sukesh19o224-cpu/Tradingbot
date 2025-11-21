@@ -97,17 +97,19 @@ class SequentialScanner:
                 # Analyze daily data for swing + positional
                 signals = self._analyze_stock(symbol, data['daily'], data['intraday'])
 
-                if signals['swing']:
-                    swing_signals.append(signals['swing'])
-                    stats['swing_found'] += 1
-                    stats['qualified_stocks'].append({'symbol': symbol, 'type': 'swing'})
-                    print(" 🔥 SWING", end='', flush=True)
-
+                # NO DUPLICATES: If qualifies for both, prioritize positional (longer-term)
                 if signals['positional']:
+                    # Positional takes priority
                     positional_signals.append(signals['positional'])
                     stats['positional_found'] += 1
                     stats['qualified_stocks'].append({'symbol': symbol, 'type': 'positional'})
                     print(" 📈 POSITIONAL", end='', flush=True)
+                elif signals['swing']:
+                    # Only add swing if NOT positional
+                    swing_signals.append(signals['swing'])
+                    stats['swing_found'] += 1
+                    stats['qualified_stocks'].append({'symbol': symbol, 'type': 'swing'})
+                    print(" 🔥 SWING", end='', flush=True)
 
             except Exception as e:
                 print(f" ⚠️ Analysis error", end='', flush=True)
@@ -185,27 +187,32 @@ class SequentialScanner:
         """
         Check if stock qualifies for SWING trade
 
-        Swing criteria:
-        - Momentum (RSI > 50) - relaxed for more opportunities
-        - Recent breakout or pullback bounce
-        - Good volume
-        - Clear intraday confirmation
+        MODERATE Swing criteria:
+        - RSI: 55-70 (narrower, momentum zone)
+        - Score: ≥7.0 (higher quality)
+        - ADX: ≥20 (trend strength required)
+        - Uptrend: Required
         """
         try:
             indicators = mtf_result.get('indicators', {})
 
-            # RSI check - relaxed range for more opportunities
+            # RSI check - moderate range (55-70)
             rsi = indicators.get('rsi', 0)
-            if rsi < 50 or rsi > 80:
+            if rsi < 55 or rsi > 70:
+                return False
+
+            # ADX check - require trend strength
+            adx = indicators.get('adx', 0)
+            if adx < 20:
                 return False
 
             # Trend check (must be in uptrend)
             if not mtf_result.get('uptrend', False):
                 return False
 
-            # Signal strength - slightly relaxed (6.0 instead of 7.0)
+            # Signal strength - moderate (7.0)
             signal_score = mtf_result.get('signal_score', 0)
-            if signal_score < 6.0:
+            if signal_score < 7.0:
                 return False
 
             return True
@@ -217,32 +224,32 @@ class SequentialScanner:
         """
         Check if stock qualifies for POSITIONAL trade
 
-        Positional criteria:
-        - Trend strength (ADX > 20) - relaxed for more opportunities
-        - Pullback to key support (20 EMA / 50 EMA)
-        - Volume confirmation
-        - Multi-week setup
+        MODERATE Positional criteria:
+        - ADX: ≥25 (stronger trend required)
+        - RSI: 50-70 (narrower, healthy range)
+        - Score: ≥7.0 (higher quality)
+        - Uptrend: Required
         """
         try:
             indicators = mtf_result.get('indicators', {})
 
-            # ADX check (trend strength) - relaxed for more opportunities
+            # ADX check - moderate (25+)
             adx = indicators.get('adx', 0)
-            if adx < 20:
+            if adx < 25:
                 return False
 
-            # RSI check (not overbought) - relaxed slightly
+            # RSI check - moderate range (50-70)
             rsi = indicators.get('rsi', 0)
-            if rsi > 75:
+            if rsi < 50 or rsi > 70:
                 return False
 
             # Trend check
             if not mtf_result.get('uptrend', False):
                 return False
 
-            # Signal strength - slightly relaxed (6.0 instead of 7.0)
+            # Signal strength - moderate (7.0)
             signal_score = mtf_result.get('signal_score', 0)
-            if signal_score < 6.0:
+            if signal_score < 7.0:
                 return False
 
             return True
