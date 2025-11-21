@@ -112,8 +112,29 @@ class MultiTimeframeAnalyzer:
         # Calculate technical indicators
         indicators = self.technical_indicators.calculate_all(df)
 
+        # Check if indicators failed
+        if indicators is None:
+            current_price = float(df['Close'].iloc[-1])
+            return {
+                'timeframe': 'DAILY',
+                'current_price': current_price,
+                'trend': 'UNKNOWN',
+                'trend_score': 5,
+                'rsi': 50,
+                'macd_signal': 'HOLD',
+                'ema_alignment': False,
+                'support_level': current_price * 0.95,
+                'resistance_level': current_price * 1.05,
+                'fibonacci_levels': {},
+                'volume_trend': 'NORMAL',
+            }
+
         # Calculate mathematical indicators
         math_indicators = self.mathematical_indicators.calculate_all(df)
+
+        # If math_indicators is None, use empty dict
+        if math_indicators is None:
+            math_indicators = {}
 
         # Determine trend
         current_price = float(df['Close'].iloc[-1])
@@ -163,13 +184,28 @@ class MultiTimeframeAnalyzer:
         # Calculate technical indicators on 15m timeframe
         indicators = self.technical_indicators.calculate_all(df)
 
+        # If indicators failed (not enough data), return minimal analysis
+        if indicators is None:
+            current_price = float(df['Close'].iloc[-1])
+            return {
+                'timeframe': '15MIN',
+                'current_price': current_price,
+                'entry_signals': {},
+                'exit_signals': {},
+                'entry_quality': 5.0,  # Neutral
+                'rsi': 50,  # Neutral
+                'macd_histogram': 0,
+                'recent_high': float(df['High'].tail(min(20, len(df))).max()),
+                'recent_low': float(df['Low'].tail(min(20, len(df))).min()),
+            }
+
         current_price = float(df['Close'].iloc[-1])
 
         # Entry signals (15m timeframe)
         entry_signals = {
             'rsi_oversold': indicators['rsi'] < 35,  # More aggressive on 15m
             'macd_bullish': indicators['macd_signal'] == 'BUY',
-            'price_above_vwap': current_price > df['Close'].rolling(20).mean().iloc[-1],
+            'price_above_vwap': current_price > df['Close'].rolling(min(20, len(df))).mean().iloc[-1],
             'recent_breakout': self._detect_breakout(df),
         }
 
@@ -177,7 +213,7 @@ class MultiTimeframeAnalyzer:
         exit_signals = {
             'rsi_overbought': indicators['rsi'] > 65,  # Earlier exit on 15m
             'macd_bearish': indicators['macd_signal'] == 'SELL',
-            'price_below_vwap': current_price < df['Close'].rolling(20).mean().iloc[-1],
+            'price_below_vwap': current_price < df['Close'].rolling(min(20, len(df))).mean().iloc[-1],
             'momentum_weakening': self._check_momentum(df),
         }
 
@@ -192,8 +228,8 @@ class MultiTimeframeAnalyzer:
             'entry_quality': entry_score,
             'rsi': indicators['rsi'],
             'macd_histogram': indicators['macd_histogram'],
-            'recent_high': float(df['High'].tail(20).max()),
-            'recent_low': float(df['Low'].tail(20).min()),
+            'recent_high': float(df['High'].tail(min(20, len(df))).max()),
+            'recent_low': float(df['Low'].tail(min(20, len(df))).min()),
         }
 
     def _detect_breakout(self, df: pd.DataFrame) -> bool:

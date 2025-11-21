@@ -338,8 +338,8 @@ class MathematicalIndicators:
         if sr.get('between_levels') or sr.get('nearest_support'):
             # Price near support is bullish
             current = df['Close'].iloc[-1]
-            nearest_support = sr.get('nearest_support', 0)
-            if nearest_support > 0:
+            nearest_support = sr.get('nearest_support')
+            if nearest_support is not None and nearest_support > 0:
                 distance_to_support = abs(current - nearest_support) / current
                 if distance_to_support < 0.02:  # Within 2%
                     score += 3
@@ -379,14 +379,14 @@ class MathematicalIndicators:
 
         # Support/Resistance signal
         current = df['Close'].iloc[-1]
-        nearest_support = sr.get('nearest_support', 0)
-        nearest_resistance = sr.get('nearest_resistance', float('inf'))
+        nearest_support = sr.get('nearest_support')
+        nearest_resistance = sr.get('nearest_resistance')
 
-        if nearest_support > 0:
+        if nearest_support is not None and nearest_support > 0:
             distance_to_support = abs(current - nearest_support) / current
             if distance_to_support < 0.02:
                 signals['support_resistance'] = 'AT_SUPPORT'
-            elif abs(current - nearest_resistance) / current < 0.02:
+            elif nearest_resistance is not None and abs(current - nearest_resistance) / current < 0.02:
                 signals['support_resistance'] = 'AT_RESISTANCE'
             else:
                 signals['support_resistance'] = 'NEUTRAL'
