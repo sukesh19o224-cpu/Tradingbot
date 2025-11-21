@@ -42,6 +42,10 @@ class MathematicalIndicators:
             return None
 
         try:
+            # Normalize column names (yfinance returns lowercase when market closed!)
+            df = df.copy()
+            df.columns = df.columns.str.capitalize()
+
             # Calculate each mathematical indicator
             fibonacci = self._calculate_fibonacci(df)
             elliott = self._detect_elliott_wave(df)

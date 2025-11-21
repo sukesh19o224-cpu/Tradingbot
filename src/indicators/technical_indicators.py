@@ -47,6 +47,10 @@ class TechnicalIndicators:
             # Make a copy to avoid modifying original
             df = df.copy()
 
+            # Normalize column names (yfinance returns lowercase when market closed!)
+            # Convert: 'open' -> 'Open', 'close' -> 'Close', etc.
+            df.columns = df.columns.str.capitalize()
+
             # Calculate all indicators
             df = self._calculate_emas(df)
             df = self._calculate_rsi(df)
