@@ -3,13 +3,17 @@
 Dual strategy: Swing Trading + Positional Trading running simultaneously
 """
 
+# Standard library imports
 import time
-from datetime import datetime, time as dt_time
-import pytz
-from typing import List, Dict
 import argparse
+from datetime import datetime, time as dt_time
+from typing import List, Dict
+
+# Third-party imports
+import pytz
 import yfinance as yf
 
+# Local imports
 from config.settings import *
 from src.data.data_fetcher import DataFetcher
 from src.data.hybrid_scanner import HybridScanner
