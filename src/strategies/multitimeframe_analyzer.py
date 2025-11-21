@@ -121,7 +121,10 @@ class MultiTimeframeAnalyzer:
                 'trend': 'UNKNOWN',
                 'trend_score': 5,
                 'rsi': 50,
+                'adx': 0,  # No trend strength
+                'macd': 0,
                 'macd_signal': 'HOLD',
+                'macd_histogram': 0,
                 'ema_alignment': False,
                 'support_level': current_price * 0.95,
                 'resistance_level': current_price * 1.05,
@@ -163,7 +166,10 @@ class MultiTimeframeAnalyzer:
             'trend': trend,
             'trend_score': trend_score,
             'rsi': indicators['rsi'],
+            'adx': indicators['adx'],  # REAL ADX from technical indicators
+            'macd': indicators['macd'],
             'macd_signal': indicators['macd_signal'],
+            'macd_histogram': indicators['macd_histogram'],
             'ema_alignment': current_price > ema_50,
             'support_level': math_indicators.get('support_level', current_price * 0.95),
             'resistance_level': math_indicators.get('resistance_level', current_price * 1.05),
@@ -343,11 +349,12 @@ class MultiTimeframeAnalyzer:
         combined['current_price'] = daily['current_price']
         combined['trend_strength'] = daily['trend']
 
-        # Add indicators dict for compatibility
+        # Add indicators dict for compatibility (using REAL values from daily analysis)
         combined['indicators'] = {
             'rsi': daily.get('rsi', 50),
-            'adx': 25 if combined['uptrend'] else 15,  # Estimate ADX from trend
-            'macd': 0,  # Not calculated in current analyzer
+            'adx': daily.get('adx', 0),  # REAL ADX from technical indicators
+            'macd': daily.get('macd', 0),  # REAL MACD from technical indicators
+            'macd_histogram': daily.get('macd_histogram', 0),
             'volume_ratio': 1.5 if daily.get('volume_trend') == 'STRONG' else 1.0
         }
 
