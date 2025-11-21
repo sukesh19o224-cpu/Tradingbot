@@ -108,15 +108,14 @@ class EODIntradaySystem:
         print()
 
         try:
-            # Run the fetch script (uses current working directory)
+            # Run the fetch script with REAL-TIME output (no buffering)
             result = subprocess.run(
                 ['python', 'scripts/fetch_nse_top_500.py'],
-                capture_output=True,
-                text=True
+                text=True,
+                bufsize=0  # No buffering - show output immediately
             )
 
             if result.returncode == 0:
-                print(result.stdout)
                 print("\n✅ EOD Ranking Complete!")
                 print("📊 config/nse_top_500_live.py generated")
                 print("💡 This list will be used for tomorrow's intraday scans")
@@ -127,7 +126,7 @@ class EODIntradaySystem:
 
             else:
                 print(f"❌ EOD Ranking Failed!")
-                print(result.stderr)
+                print("Check the output above for errors")
 
         except Exception as e:
             print(f"❌ Error running EOD ranking: {e}")
