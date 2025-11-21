@@ -10,32 +10,49 @@ import json
 from datetime import datetime
 import os
 
-# Import verified stock list
+# Import verified stock lists
 from config.nse_verified_stocks import ALL_VERIFIED_STOCKS
+from config.nse_top_500 import NIFTY_500_STOCKS
 
 
 class NSEStockFetcher:
     """
-    Fetches complete NSE stock list using verified symbols
+    Fetches NSE stock list using safe pre-verified symbols
 
-    Priority:
-    1. If data/nse_all_stocks.json exists → Use that (full NSE list)
-    2. Otherwise → Use config/nse_verified_stocks.py (curated 283 stocks)
+    Priority (SAFEST → RISKIEST):
+    1. config/nse_top_500.py → NIFTY 500 (most liquid, safest) ✅ DEFAULT
+    2. data/nse_all_stocks.json → Full NSE list (if exists, updated daily)
+    3. config/nse_verified_stocks.py → Original 283 stocks (fallback)
 
-    All symbols are tested to work on Yahoo Finance
+    All symbols are pre-tested to work on Yahoo Finance (no validation needed!)
     """
 
-    def __init__(self):
+    def __init__(self, use_nifty_500: bool = True):
+        """
+        Initialize NSE stock fetcher
+
+        Args:
+            use_nifty_500: Use NIFTY 500 (default=True, recommended for API safety)
+        """
         self.all_stocks_file = 'data/nse_all_stocks.json'
+        self.use_nifty_500 = use_nifty_500
         self.stocks = self._load_stocks()
 
     def _load_stocks(self) -> List[str]:
         """
-        Load stock list with priority:
-        1. From data/nse_all_stocks.json (if exists)
-        2. From config/nse_verified_stocks.py (fallback)
+        Load stock list with priority (safest first):
+        1. NIFTY 500 (500 most liquid stocks - SAFE, no validation) ✅ DEFAULT
+        2. data/nse_all_stocks.json (if exists - updated daily at 3:45 PM)
+        3. config/nse_verified_stocks.py (original 283 stocks - fallback)
         """
-        # Try to load from full NSE list JSON file
+        # PRIORITY 1: Use NIFTY 500 (SAFEST - pre-verified, most liquid)
+        if self.use_nifty_500:
+            print(f"📊 Using NIFTY 500 stock list (pre-verified, safest)")
+            print(f"   ✅ Total stocks: {len(NIFTY_500_STOCKS)}")
+            print(f"   💡 These are the most liquid NSE stocks - no validation needed!")
+            return NIFTY_500_STOCKS.copy()
+
+        # PRIORITY 2: Try to load from full NSE list JSON file (daily update)
         if os.path.exists(self.all_stocks_file):
             try:
                 with open(self.all_stocks_file, 'r') as f:
@@ -50,13 +67,13 @@ class NSEStockFetcher:
                 print(f"⚠️ Error loading {self.all_stocks_file}: {e}")
                 print(f"   Falling back to verified stocks...")
 
-        # Fallback to verified stocks from config
+        # PRIORITY 3: Fallback to verified stocks from config
         print(f"📊 Using curated verified stock list from config")
         return ALL_VERIFIED_STOCKS
 
     def fetch_nse_stocks(self) -> List[str]:
         """
-        Get complete NSE stock list (verified working stocks)
+        Get NSE stock list (verified working stocks)
 
         Returns:
             List of NSE stock symbols in Yahoo Finance format (SYMBOL.NS)
@@ -64,10 +81,13 @@ class NSEStockFetcher:
         print(f"   ✅ Loaded {len(self.stocks)} verified NSE stocks")
         print(f"   • All symbols tested working on Yahoo Finance")
 
-        if len(self.stocks) < 500:
+        if self.use_nifty_500:
+            print(f"   • Coverage: NIFTY 500 (most liquid stocks)")
+            print(f"   • SAFE: No API validation needed, pre-verified!")
+            print(f"   • Includes: NIFTY 50, Next 50, Midcap 150, Smallcap 100+")
+        elif len(self.stocks) < 500:
             print(f"   • Coverage: NIFTY 50, Next 50, Midcap 100, Smallcap 100")
             print(f"   • Sectors: Banking, IT, Pharma, Auto, FMCG, Metal, Energy, Infra, Realty")
-            print(f"   💡 To get FULL NSE list (~1500-2000 stocks): python scripts/fetch_all_nse_stocks.py")
         else:
             print(f"   • Coverage: FULL NSE equity list")
             print(f"   • All actively traded stocks included")

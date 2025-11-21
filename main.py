@@ -52,12 +52,11 @@ class TradingSystem:
         # Scan ALL verified NSE stocks (no tier selection needed!)
         self.watchlist = self.nse_fetcher.fetch_nse_stocks()
 
-        # Auto-adjust threads based on stock count for optimal performance
-        # 300 stocks: 30 threads (~1 min scan)
-        # 600 stocks: 30 threads (~2 min scan)
-        # 1000 stocks: 50 threads (~2.5 min scan)
-        # 1500+ stocks: 50 threads (~3-4 min scan)
-        optimal_threads = 30 if len(self.watchlist) < 1000 else 50
+        # ULTRA-SAFE thread settings (avoid Yahoo Finance API bans)
+        # 500 stocks: 10 threads (~2-3 min scan) - SAFE
+        # 1000+ stocks: 15 threads (~4-5 min scan) - SAFER
+        # Conservative threading + smart caching + 10min intervals = Zero API issues!
+        optimal_threads = 10 if len(self.watchlist) <= 500 else 15
         self.hybrid_scanner = HybridScanner(max_workers=optimal_threads)
 
         self.is_running = False

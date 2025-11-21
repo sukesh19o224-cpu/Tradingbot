@@ -25,14 +25,15 @@ class HybridScanner:
     - Can be both, one, or neither
     """
 
-    def __init__(self, max_workers: int = 30):
+    def __init__(self, max_workers: int = 10):
         """
         Initialize hybrid scanner
 
         Args:
-            max_workers: Number of parallel threads (default 30 for fast scanning)
-                        30 threads can scan ~600 stocks in ~2 minutes
-                        Increase to 50 for scanning 1000+ stocks
+            max_workers: Number of parallel threads (default 10 for API-safe scanning)
+                        10 threads can scan ~500 stocks in ~2-3 minutes (SAFE)
+                        Use 15 threads for 1000+ stocks (still safe)
+                        NEVER use >20 threads (risk of Yahoo Finance API ban!)
         """
         self.data_fetcher = DataFetcher()
         self.signal_generator = SignalGenerator()

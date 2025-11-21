@@ -51,7 +51,7 @@ run_live_mode() {
     echo "✨ HYBRID SYSTEM - Never miss opportunities!"
     echo ""
     echo "📌 How it works:"
-    echo "   • Scans ALL 800 verified NSE stocks"
+    echo "   • Scans NIFTY 500 (most liquid NSE stocks)"
     echo "   • Every stock checked for BOTH opportunities:"
     echo "     🔥 Swing: Fast momentum, breakouts (5-10%, 1-5 days)"
     echo "     📈 Positional: Trends, pullbacks (15-30%, 2-4 weeks)"
