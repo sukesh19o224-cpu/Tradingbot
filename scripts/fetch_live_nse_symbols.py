@@ -43,15 +43,46 @@ def fetch_current_nse_symbols_from_nse_india():
         df = pd.read_csv(StringIO(response.text))
 
         # Extract symbols and add .NS suffix for Yahoo Finance
+        # FILTER: Only pure equity stocks (remove bonds, rights, warrants, etc.)
         symbols = []
+        filtered_out = 0
+
         for _, row in df.iterrows():
             symbol = str(row['SYMBOL']).strip()
-            if symbol and symbol != 'SYMBOL':  # Skip header if any
-                symbols.append(f"{symbol}.NS")
 
-        print(f"✅ Fetched {len(symbols)} symbols from NSE India")
+            if not symbol or symbol == 'SYMBOL':  # Skip empty/header
+                continue
+
+            # FILTER OUT special instruments (not equity stocks):
+            # - Symbols with hyphens (bonds, rights, warrants): "ABC-RE", "XYZ-W1"
+            # - Symbols ending with numbers (series, bonds): "ABC1", "XYZ2"
+            # - Symbols with special chars: "&", "$", etc.
+            # - Very long symbols (usually special instruments)
+
+            if '-' in symbol:  # Rights, bonds, warrants
+                filtered_out += 1
+                continue
+
+            if symbol[-1].isdigit():  # Series, bonds
+                filtered_out += 1
+                continue
+
+            if len(symbol) > 20:  # Unusually long (special instruments)
+                filtered_out += 1
+                continue
+
+            if not symbol.replace('&', '').isalnum():  # Special chars (except &)
+                filtered_out += 1
+                continue
+
+            # Valid equity symbol
+            symbols.append(f"{symbol}.NS")
+
+        print(f"✅ Fetched {len(symbols)} EQUITY symbols from NSE India")
         print(f"   Source: NSE Official EQUITY_L.csv")
-        print(f"   Date: November 2025 (LIVE data)\n")
+        print(f"   Date: November 2025 (LIVE data)")
+        print(f"   Filtered out: {filtered_out} non-equity instruments (bonds, rights, etc.)")
+        print()
 
         return symbols
 
@@ -109,12 +140,29 @@ def validate_symbol_realtime(symbol, max_retries=2):
 
     Returns: (is_valid, stock_info)
     """
+    import warnings
+    import logging
+
+    # SILENCE all yfinance errors (no console spam!)
+    warnings.filterwarnings('ignore')
+    logging.getLogger('yfinance').setLevel(logging.CRITICAL)
+
     for attempt in range(max_retries):
         try:
             ticker = yf.Ticker(symbol)
 
             # Fetch last 5 days (proves it's actively trading NOW)
-            df = ticker.history(period='5d')
+            # Suppress stderr output
+            import sys
+            import os
+            old_stderr = sys.stderr
+            sys.stderr = open(os.devnull, 'w')
+
+            try:
+                df = ticker.history(period='5d')
+            finally:
+                sys.stderr.close()
+                sys.stderr = old_stderr
 
             time.sleep(0.15)  # 150ms delay to avoid rate limiting
 
@@ -129,7 +177,7 @@ def validate_symbol_realtime(symbol, max_retries=2):
                 return False, None
 
             # Check volume (must have trading activity)
-            recent_volume = df['Volume'].iloc[-1]
+            recent_volume = df['Volume'].iloc[-1] if 'Volume' in df.columns else 0
             if recent_volume == 0:  # No volume = not trading
                 return False, None
 
@@ -145,8 +193,9 @@ def validate_symbol_realtime(symbol, max_retries=2):
             return True, info
 
         except Exception as e:
+            # Silent skip - no console output
             if attempt < max_retries - 1:
-                time.sleep(1)  # Wait before retry
+                time.sleep(0.5)  # Wait before retry
             else:
                 return False, None
 
