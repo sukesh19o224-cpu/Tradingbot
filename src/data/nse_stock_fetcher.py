@@ -10,9 +10,11 @@ import json
 from datetime import datetime
 import os
 
-# Import verified stock lists
+# Import verified stock lists (OUTDATED - from 2024!)
 from config.nse_verified_stocks import ALL_VERIFIED_STOCKS
-from config.nse_top_500 import NIFTY_500_STOCKS
+
+# NOTE: For LIVE November 2025 symbols, run:
+#       python3 scripts/fetch_live_nse_symbols.py
 
 
 class NSEStockFetcher:
@@ -43,10 +45,10 @@ class NSEStockFetcher:
         Load stock list with priority (newest first):
         1. data/nse_live_stocks_nov2025.json → LIVE symbols (Nov 2025) ✅ PRIORITY
         2. config/nse_live_nov2025.py → Generated Python config (if exists)
-        3. config/nse_top_500.py → NIFTY 500 (fallback if use_nifty_500=True)
-        4. config/nse_verified_stocks.py → Original 283 stocks (last resort)
+        3. data/nse_all_stocks.json → Old JSON (outdated, if exists)
+        4. config/nse_verified_stocks.py → Original 283 stocks (OUTDATED 2024!)
 
-        To update to latest Nov 2025 symbols, run:
+        ⚠️  OLD FILES DELETED! Use live symbol fetcher:
             python3 scripts/fetch_live_nse_symbols.py
         """
         # PRIORITY 1: Try LIVE symbols from Nov 2025 (most recent!)
@@ -74,15 +76,7 @@ class NSEStockFetcher:
         except ImportError:
             pass  # File doesn't exist yet
 
-        # PRIORITY 3: Use NIFTY 500 (if enabled, but may be outdated)
-        if self.use_nifty_500:
-            print(f"📊 Using NIFTY 500 stock list")
-            print(f"   ✅ Total stocks: {len(NIFTY_500_STOCKS)}")
-            print(f"   ⚠️  Note: Symbols may be outdated (from 2024)")
-            print(f"   🔄 Run: python3 scripts/fetch_live_nse_symbols.py for Nov 2025 data")
-            return NIFTY_500_STOCKS.copy()
-
-        # PRIORITY 4: Try old full NSE list JSON
+        # PRIORITY 3: Try old full NSE list JSON (outdated!)
         if os.path.exists(self.all_stocks_file):
             try:
                 with open(self.all_stocks_file, 'r') as f:
@@ -91,15 +85,17 @@ class NSEStockFetcher:
                     if stocks:
                         print(f"📊 Loaded NSE stock list from {self.all_stocks_file}")
                         print(f"   ✅ Total stocks: {len(stocks)}")
-                        print(f"   ⚠️  Warning: May contain outdated symbols")
+                        print(f"   ⚠️  WARNING: Contains OUTDATED symbols (from 2024)!")
+                        print(f"   🔄 URGENT: Run python3 scripts/fetch_live_nse_symbols.py")
                         return stocks
             except Exception as e:
                 print(f"⚠️ Error loading {self.all_stocks_file}: {e}")
 
-        # PRIORITY 5: Last resort fallback
+        # PRIORITY 4: Last resort fallback (VERY OUTDATED!)
         print(f"📊 Using fallback verified stock list (283 stocks)")
-        print(f"   ⚠️  WARNING: Symbols may be outdated (from 2024)!")
-        print(f"   🔄 RECOMMENDED: Run python3 scripts/fetch_live_nse_symbols.py")
+        print(f"   ⚠️  CRITICAL WARNING: Symbols are OUTDATED (from 2024)!")
+        print(f"   🔥 URGENT: Run python3 scripts/fetch_live_nse_symbols.py NOW")
+        print(f"   Many stocks may fail due to delisting/mergers!")
         return ALL_VERIFIED_STOCKS
 
     def fetch_nse_stocks(self) -> List[str]:
