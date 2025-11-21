@@ -120,15 +120,17 @@ MAX_SWING_SIGNALS_PER_SCAN = 5  # Max swing signals to process per scan
 MAX_POSITIONAL_SIGNALS_PER_SCAN = 3  # Max positional signals to process per scan
 
 # Dynamic Capital Allocation (By Signal Type)
-# Allocates more to common signals (MR), reserves capacity for rare signals (Momentum/BO)
-DYNAMIC_ALLOCATION_ENABLED = True
+# DISABLED: Focus on signal quality, not signal type
+DYNAMIC_ALLOCATION_ENABLED = False  # Disabled - use quality-based allocation only
 MEAN_REVERSION_CAPITAL_PCT = 0.70  # 70% capital for mean reversion (common)
 MOMENTUM_CAPITAL_PCT = 0.20  # 20% capital for momentum (less common)
 BREAKOUT_CAPITAL_PCT = 0.10  # 10% capital for breakout (rare but valuable)
 
-# Auto-exit mean reversion for high-quality momentum/breakout
-AUTO_EXIT_MR_FOR_MOMENTUM = True  # Exit MR positions to free capital for momentum
-MR_EXIT_THRESHOLD_SCORE = 8.5  # Only exit MR if momentum signal score >= 8.5
+# Smart P&L-Based Position Replacement
+# Exit weak positions (losing/low-profit) to free capital for high-quality new signals
+AUTO_EXIT_WEAK_FOR_QUALITY = True  # Exit weakest position for high-quality signals
+QUALITY_REPLACEMENT_THRESHOLD = 8.5  # Only replace if new signal score >= 8.5
+MIN_SCORE_DIFFERENCE = 0.5  # New signal must be at least 0.5 points better than weakest
 
 # Signal Weights
 WEIGHTS = {

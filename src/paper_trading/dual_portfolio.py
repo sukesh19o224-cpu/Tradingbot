@@ -50,7 +50,7 @@ class DualPortfolio:
 
     def execute_swing_signal(self, signal: Dict) -> bool:
         """
-        Execute swing trading signal
+        Execute swing trading signal with smart cross-portfolio management
 
         Args:
             signal: Swing signal dictionary
@@ -66,11 +66,14 @@ class DualPortfolio:
 
         # Add strategy tag
         signal['strategy'] = 'swing'
+
+        # Try to execute in swing portfolio
+        # Smart replacement will handle capital/position limits automatically
         return self.swing_portfolio.execute_signal(signal)
 
     def execute_positional_signal(self, signal: Dict) -> bool:
         """
-        Execute positional trading signal
+        Execute positional trading signal with smart cross-portfolio management
 
         Args:
             signal: Positional signal dictionary
@@ -86,6 +89,9 @@ class DualPortfolio:
 
         # Add strategy tag
         signal['strategy'] = 'positional'
+
+        # Try to execute in positional portfolio
+        # Smart replacement will handle capital/position limits automatically
         return self.positional_portfolio.execute_signal(signal)
 
     def monitor_swing_positions(self, current_prices: Dict[str, float]) -> List[Dict]:

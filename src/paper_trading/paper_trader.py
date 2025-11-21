@@ -153,23 +153,30 @@ class PaperTrader:
                 return False
 
             # CRITICAL FIX #1: Enforce MAX_POSITIONS limit
+            # BUT: Allow replacement if signal is high quality
             if len(self.positions) >= MAX_POSITIONS:
-                print(f"📄 Max positions ({MAX_POSITIONS}) reached, skipping {symbol}")
-                return False
-
-            # DYNAMIC ALLOCATOR: Check signal type capacity
-            if DYNAMIC_ALLOCATION_ENABLED:
-                signal_type = signal.get('signal_type', 'MOMENTUM')
-                if not self._has_signal_type_capacity(signal_type, signal):
-                    print(f"📄 No capacity for {signal_type} signals, skipping {symbol}")
+                # Try to exit weakest position if new signal is high quality
+                if self._try_smart_replacement(signal):
+                    print(f"📄 Replaced weak position for high-quality signal {symbol}")
+                else:
+                    print(f"📄 Max positions ({MAX_POSITIONS}) reached, skipping {symbol}")
                     return False
 
             # Calculate position size (Kelly Criterion based + quality multiplier)
             position_size = self._calculate_position_size(signal)
 
             if position_size <= 0:
-                print(f"📄 Insufficient capital for {symbol}")
-                return False
+                # Try to exit weakest position if new signal is high quality
+                if self._try_smart_replacement(signal):
+                    print(f"📄 Freed capital by exiting weak position for {symbol}")
+                    # Recalculate position size after freeing capital
+                    position_size = self._calculate_position_size(signal)
+                    if position_size <= 0:
+                        print(f"📄 Still insufficient capital for {symbol}")
+                        return False
+                else:
+                    print(f"📄 Insufficient capital for {symbol}")
+                    return False
 
             entry_price = signal['entry_price']
             shares = int(position_size / entry_price)
@@ -455,102 +462,88 @@ class PaperTrader:
             print(f"❌ Position sizing error: {e}")
             return 0
 
-    def _has_signal_type_capacity(self, signal_type: str, signal: Dict) -> bool:
+    def _try_smart_replacement(self, new_signal: Dict) -> bool:
         """
-        Check if we have capacity to take this signal type
+        Smart P&L-based position replacement
 
-        DYNAMIC ALLOCATOR:
-        - Mean Reversion: 70% of portfolio capital
-        - Momentum: 20% of portfolio capital
-        - Breakout: 10% of portfolio capital
+        Exit weakest position (by P&L and score) to free capital for high-quality new signal
 
-        If Momentum/Breakout signal is high quality (score >= 8.5):
-        - Auto-exit weakest mean reversion position to free capital
-        """
-        if not DYNAMIC_ALLOCATION_ENABLED:
-            return True  # No restriction
-
-        # Calculate total portfolio value
-        portfolio_value = self.capital + sum(p['shares'] * p['entry_price'] for p in self.positions.values())
-
-        # Calculate capital allocated by signal type
-        mr_allocated = sum(
-            p['shares'] * p['entry_price']
-            for p in self.positions.values()
-            if p.get('signal_type', 'MOMENTUM') == 'MEAN_REVERSION'
-        )
-        momentum_allocated = sum(
-            p['shares'] * p['entry_price']
-            for p in self.positions.values()
-            if p.get('signal_type', 'MOMENTUM') == 'MOMENTUM'
-        )
-        breakout_allocated = sum(
-            p['shares'] * p['entry_price']
-            for p in self.positions.values()
-            if p.get('signal_type', 'MOMENTUM') == 'BREAKOUT'
-        )
-
-        # Calculate limits
-        mr_limit = portfolio_value * MEAN_REVERSION_CAPITAL_PCT
-        momentum_limit = portfolio_value * MOMENTUM_CAPITAL_PCT
-        breakout_limit = portfolio_value * BREAKOUT_CAPITAL_PCT
-
-        # Check if we have capacity
-        if signal_type == 'MEAN_REVERSION':
-            has_capacity = mr_allocated < mr_limit
-        elif signal_type == 'MOMENTUM':
-            has_capacity = momentum_allocated < momentum_limit
-        elif signal_type == 'BREAKOUT':
-            has_capacity = breakout_allocated < breakout_limit
-        else:
-            has_capacity = True  # Unknown type, allow
-
-        # If no capacity but signal is high-quality momentum/breakout, exit weakest MR
-        if not has_capacity and AUTO_EXIT_MR_FOR_MOMENTUM:
-            if signal_type in ['MOMENTUM', 'BREAKOUT']:
-                if signal.get('score', 0) >= MR_EXIT_THRESHOLD_SCORE:
-                    # Try to exit weakest mean reversion position
-                    exited = self._exit_weakest_mean_reversion()
-                    if exited:
-                        print(f"   💡 Exited weak MR position to free capital for {signal_type} signal!")
-                        return True  # Now we have capacity
-
-        return has_capacity
-
-    def _exit_weakest_mean_reversion(self) -> bool:
-        """
-        Exit the weakest (lowest score) mean reversion position
-        to free capital for high-quality momentum/breakout signals
+        Logic:
+        1. Only works if new signal score >= QUALITY_REPLACEMENT_THRESHOLD (8.5)
+        2. Finds weakest position considering:
+           - Current P&L (loss/low profit prioritized for exit)
+           - Signal score (low score prioritized for exit)
+        3. Only exits if new signal is significantly better (MIN_SCORE_DIFFERENCE)
 
         Returns:
-            True if a position was exited
+            True if a position was exited to free capital
         """
-        # Find all mean reversion positions
-        mr_positions = [
-            (symbol, pos)
-            for symbol, pos in self.positions.items()
-            if pos.get('signal_type', 'MOMENTUM') == 'MEAN_REVERSION'
-        ]
+        # Import settings
+        from config.settings import AUTO_EXIT_WEAK_FOR_QUALITY, QUALITY_REPLACEMENT_THRESHOLD, MIN_SCORE_DIFFERENCE
 
-        if not mr_positions:
+        if not AUTO_EXIT_WEAK_FOR_QUALITY:
             return False
 
-        # Find weakest (lowest score)
-        weakest = min(mr_positions, key=lambda x: x[1].get('score', 7.0))
-        symbol, position = weakest
+        new_score = new_signal.get('score', 0)
 
-        # Exit at current price (assume entry price as proxy for current)
-        # In real implementation, would fetch current price
-        exit_price = position['entry_price'] * 1.02  # Assume small profit
+        # Only replace for high-quality signals
+        if new_score < QUALITY_REPLACEMENT_THRESHOLD:
+            return False
 
-        exit_info = self._exit_position(
-            symbol,
-            exit_price,
-            'AUTO_EXIT_FOR_MOMENTUM',
-            full_exit=True
-        )
+        # Need at least one position to replace
+        if len(self.positions) == 0:
+            return False
 
-        return exit_info is not None
+        # Find weakest position by combined P&L and score ranking
+        # We need current prices to calculate P&L
+        from src.data.enhanced_data_fetcher import EnhancedDataFetcher
+        fetcher = EnhancedDataFetcher(api_delay=0.2)
+
+        weakest_symbol = None
+        weakest_rank = float('inf')  # Lower is worse
+
+        for symbol, position in self.positions.items():
+            # Get current price
+            current_price = fetcher.get_current_price(symbol)
+            if current_price <= 0:
+                current_price = position['entry_price']  # Fallback
+
+            # Calculate P&L percentage
+            pnl_pct = (current_price - position['entry_price']) / position['entry_price'] * 100
+
+            # Get position score
+            pos_score = position.get('score', 7.0)
+
+            # Calculate weakness rank (lower = weaker = better to exit)
+            # Priority: Losing positions first, then low-profit, then low-score
+            # Formula: pnl_pct (negative is bad) + score (low is bad) * 10
+            # Example: -5% P&L, score 7.0 = -5 + 70 = 65
+            # Example: +2% P&L, score 7.5 = 2 + 75 = 77
+            # Example: -2% P&L, score 8.0 = -2 + 80 = 78
+            # So losing position with low score gets lowest rank
+            weakness_rank = pnl_pct + (pos_score * 10)
+
+            if weakness_rank < weakest_rank:
+                weakest_rank = weakness_rank
+                weakest_symbol = symbol
+                weakest_price = current_price
+                weakest_score = pos_score
+
+        # Check if new signal is significantly better than weakest position
+        if weakest_symbol and (new_score >= weakest_score + MIN_SCORE_DIFFERENCE):
+            # Exit the weakest position
+            exit_info = self._exit_position(
+                weakest_symbol,
+                weakest_price,
+                f'SMART_REPLACEMENT (Score: {weakest_score:.1f} → {new_score:.1f})',
+                full_exit=True
+            )
+
+            if exit_info:
+                print(f"   💡 Smart replacement: Exited {weakest_symbol} (Score {weakest_score:.1f}, P&L {exit_info['pnl_percent']:+.1f}%) for better signal!")
+                return True
+
+        return False
 
     def get_portfolio_value(self, current_prices: Dict[str, float]) -> float:
         """Calculate total portfolio value"""
