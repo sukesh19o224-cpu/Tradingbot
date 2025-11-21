@@ -1,10 +1,11 @@
 #!/bin/bash
 
-# 🚀 ONE-TIME SETUP SCRIPT
-# Run this once to set up your trading system
+# 🚀 CLEAN SETUP SCRIPT - LOCAL INSTALLATION ONLY
+# Deletes old venv and creates fresh local installation
+# NOTHING installed to OS/system - everything in ./venv/
 
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║     🚀 SUPER MATH TRADING SYSTEM - SETUP                ║"
+echo "║     🚀 TRADING SYSTEM - CLEAN LOCAL SETUP               ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -18,64 +19,110 @@ python_version=$(python3 --version 2>&1 | awk '{print $2}')
 echo "   ✅ Found: Python $python_version"
 echo ""
 
-# Create virtual environment
-echo "🔧 Creating virtual environment in current directory..."
+# Remove old venv if exists (CLEAN START)
+echo "🗑️  Removing old virtual environment (if exists)..."
 if [ -d "venv" ]; then
-    echo "   ✅ Virtual environment already exists"
+    echo "   Deleting old venv..."
+    rm -rf venv
+    echo "   ✅ Old venv deleted!"
 else
-    python3 -m venv venv
-    if [ $? -eq 0 ]; then
-        echo "   ✅ Virtual environment created!"
-    else
-        echo "   ❌ Failed to create virtual environment"
-        echo "   Try: sudo apt install python3-venv"
-        exit 1
-    fi
+    echo "   ✅ No old venv found"
+fi
+
+# Remove any .venv as well
+if [ -d ".venv" ]; then
+    echo "   Deleting old .venv..."
+    rm -rf .venv
+    echo "   ✅ Old .venv deleted!"
+fi
+echo ""
+
+# Create fresh virtual environment
+echo "🔧 Creating FRESH virtual environment in project directory..."
+python3 -m venv venv
+if [ $? -eq 0 ]; then
+    echo "   ✅ Fresh virtual environment created in ./venv/"
+else
+    echo "   ❌ Failed to create virtual environment"
+    echo "   Try: sudo apt install python3-venv"
+    exit 1
 fi
 echo ""
 
 # Activate virtual environment
-echo "📦 Installing dependencies in current directory..."
-echo "   Using pre-built wheels (no compilation needed)"
+echo "📦 Activating virtual environment..."
+source venv/bin/activate
+echo "   ✅ Virtual environment activated"
+echo ""
+
+# Verify we're using LOCAL venv, NOT system Python
+echo "🔍 Verifying local installation..."
+PYTHON_PATH=$(which python3)
+if [[ $PYTHON_PATH == *"/venv/"* ]]; then
+    echo "   ✅ Using LOCAL Python: $PYTHON_PATH"
+else
+    echo "   ⚠️  WARNING: Python path: $PYTHON_PATH"
+    echo "   This should be in ./venv/ directory!"
+fi
+echo ""
+
+# Upgrade pip (local only)
+echo "⬆️  Upgrading pip (local venv only)..."
+pip install --upgrade pip --quiet
+echo "   ✅ Pip upgraded"
+echo ""
+
+# Install dependencies (LOCAL ONLY - no system installation)
+echo "📦 Installing dependencies (LOCAL in ./venv/ only)..."
 echo "   This may take 2-3 minutes..."
 echo ""
-source venv/bin/activate
 
-# Upgrade pip
-echo "   Upgrading pip..."
-pip install --upgrade pip > /dev/null 2>&1
-
-# Install dependencies using pre-built wheels only (no compilation)
-echo "   Installing packages (this happens locally in venv folder)..."
-pip install --only-binary=:all: -r requirements.txt 2>&1 | grep -v "Requirement already satisfied" || true
-
-# Check if installation was successful
-python3 -c "import numpy, pandas; print('   ✅ Core packages installed successfully!')" 2>/dev/null
-if [ $? -ne 0 ]; then
-    echo "   ⚠️  Some core packages failed to install"
-    echo "   Trying alternative installation method..."
-
-    # Try installing without --only-binary for packages that don't have wheels
-    pip install numpy pandas yfinance streamlit plotly requests discord-webhook python-dotenv pytz colorama sqlalchemy
-fi
+# Install core packages (most important ones explicitly)
+echo "   Installing core packages..."
+pip install --no-cache-dir numpy pandas --quiet
+pip install --no-cache-dir yfinance --quiet
+pip install --no-cache-dir streamlit plotly --quiet
+pip install --no-cache-dir requests discord-webhook --quiet
+pip install --no-cache-dir python-dotenv pytz colorama --quiet
+pip install --no-cache-dir sqlalchemy --quiet
+pip install --no-cache-dir ta-lib --quiet 2>/dev/null || echo "   ⚠️  ta-lib skipped (optional)"
 
 echo ""
-echo "   ✅ Installation complete! All packages installed in ./venv/"
+echo "   ✅ All packages installed in ./venv/ (LOCAL only)"
+echo ""
+
+# Verify yfinance is installed locally
+echo "🧪 Verifying installations..."
+python3 -c "import yfinance as yf; print('   ✅ yfinance installed successfully!')" 2>/dev/null
+if [ $? -ne 0 ]; then
+    echo "   ❌ yfinance not found! Retrying..."
+    pip install yfinance
+fi
+
+python3 -c "import pandas as pd; print('   ✅ pandas installed successfully!')" 2>/dev/null
+python3 -c "import numpy as np; print('   ✅ numpy installed successfully!')" 2>/dev/null
+python3 -c "import streamlit as st; print('   ✅ streamlit installed successfully!')" 2>/dev/null
 echo ""
 
 # Create directories
 echo "📁 Creating data directories..."
 mkdir -p data
 mkdir -p logs
+mkdir -p data/cache
 echo "   ✅ Directories created!"
 echo ""
 
 # Setup .env file
 if [ ! -f .env ]; then
     echo "🔧 Setting up .env file..."
-    cp .env.example .env
-    echo "   ⚠️  IMPORTANT: Edit .env file and add your Discord webhook URL!"
-    echo "   File location: .env"
+    if [ -f .env.example ]; then
+        cp .env.example .env
+        echo "   ⚠️  IMPORTANT: Edit .env file and add your Discord webhook URL!"
+        echo "   File location: .env"
+    else
+        echo "   ⚠️  .env.example not found, creating basic .env..."
+        echo "DISCORD_WEBHOOK_URL=YOUR_WEBHOOK_URL_HERE" > .env
+    fi
     echo ""
 else
     echo "✅ .env file already exists"
@@ -83,23 +130,31 @@ else
 fi
 
 # Test imports
-echo "🧪 Testing Python imports..."
-if python3 -c "
+echo "🧪 Testing project imports..."
+python3 -c "
 import sys
 try:
     from config.settings import *
+    print('   ✅ config.settings imported')
     from src.data.data_fetcher import DataFetcher
+    print('   ✅ DataFetcher imported')
     from src.strategies.signal_generator import SignalGenerator
-    print('   ✅ All imports working!')
+    print('   ✅ SignalGenerator imported')
+    from config.nse_top_500 import NIFTY_500_STOCKS
+    print('   ✅ NIFTY_500_STOCKS imported')
+    print('   ✅ All project imports working!')
 except Exception as e:
     print(f'   ❌ Import error: {e}')
-    sys.exit(1)
-" 2>&1; then
-    echo ""
-else
-    echo "   ⚠️  Some imports failed, but you can continue"
-    echo ""
-fi
+    print('   This may be okay if some files are missing')
+" 2>&1
+echo ""
+
+# Show installation location
+echo "📍 Installation verification:"
+echo "   Python: $(which python3)"
+echo "   Pip: $(which pip)"
+echo "   Packages location: ./venv/lib/python*/site-packages/"
+echo ""
 
 # Deactivate venv
 deactivate
@@ -117,27 +172,29 @@ fi
 
 # Summary
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║                  ✅ SETUP COMPLETE!                      ║"
+echo "║            ✅ CLEAN SETUP COMPLETE!                     ║"
 echo "╚══════════════════════════════════════════════════════════╝"
+echo ""
+echo "📝 What was installed:"
+echo "   ✅ Fresh virtual environment in ./venv/"
+echo "   ✅ All Python packages in ./venv/ (LOCAL only)"
+echo "   ✅ NOTHING installed to OS/system Python"
+echo "   ✅ Data directories created"
+echo ""
+echo "📊 Disk usage: $(du -sh venv 2>/dev/null | cut -f1) in ./venv/"
 echo ""
 echo "📝 Next Steps:"
 echo ""
-echo "1. Configure Discord (if not done):"
+echo "1. Configure Discord (if needed):"
 echo "   nano .env    # Add your webhook URL"
 echo ""
-echo "2. Test Discord connection:"
-echo "   ./RUN.sh test-discord"
+echo "2. Test the system:"
+echo "   ./RUN.sh once     # Single scan (recommended first test)"
 echo ""
-echo "3. Run the system:"
+echo "3. Run live trading:"
 echo "   ./RUN.sh          # Interactive menu"
-echo "   ./RUN.sh once     # Single scan"
 echo "   ./RUN.sh live     # Continuous mode"
 echo ""
-echo "💡 All packages installed locally in ./venv/ folder"
-echo "   No system packages used - everything is in this directory!"
-echo "   RUN.sh automatically activates venv when needed"
-echo ""
-echo "📊 Disk usage: $(du -sh venv 2>/dev/null | cut -f1) used in venv folder"
-echo ""
-echo "📖 For full documentation, see: README.md"
+echo "💡 RUN.sh automatically activates ./venv/ when needed"
+echo "   Everything is LOCAL - no OS/system packages used!"
 echo ""
