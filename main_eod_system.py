@@ -67,14 +67,20 @@ class EODIntradaySystem:
         Load stock list from config
 
         Priority:
-        1. nse_top_500_live.py (if exists - from EOD ranking)
+        1. nse_top_500_live.py (if exists and not empty - from EOD ranking)
         2. nse_top_50_working.py (fallback)
         """
         try:
             # Try to load NSE Top 500 (from EOD ranking)
             from config.nse_top_500_live import NSE_TOP_500, GENERATED_DATE
-            print(f"📊 Loaded NSE Top 500 (Generated: {GENERATED_DATE})")
-            return NSE_TOP_500
+
+            # Check if list is not empty (not placeholder)
+            if NSE_TOP_500 and len(NSE_TOP_500) > 0:
+                print(f"📊 Loaded NSE Top 500 (Generated: {GENERATED_DATE})")
+                return NSE_TOP_500
+            else:
+                # Empty list - use fallback
+                raise ImportError("Top 500 list is empty (placeholder)")
 
         except ImportError:
             # Fallback to Top 50

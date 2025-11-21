@@ -125,7 +125,10 @@ class SequentialScanner:
         print(f"✅ Sequential Scan Complete!")
         print(f"⏱️ Time: {elapsed/60:.1f} minutes ({elapsed:.1f}s)")
         print(f"📊 Processed: {stats['processed']}/{stats['total']} stocks")
-        print(f"✅ Data Success: {stats['data_success']} ({stats['data_success']/stats['total']*100:.1f}%)")
+
+        # Avoid division by zero
+        success_rate = (stats['data_success']/stats['total']*100) if stats['total'] > 0 else 0
+        print(f"✅ Data Success: {stats['data_success']} ({success_rate:.1f}%)")
         print(f"❌ Data Failed: {stats['data_failed']}")
         print(f"🔥 Swing Signals: {stats['swing_found']}")
         print(f"📈 Positional Signals: {stats['positional_found']}")
