@@ -102,10 +102,9 @@ class EODIntradaySystem:
         print()
 
         try:
-            # Run the fetch script
+            # Run the fetch script (uses current working directory)
             result = subprocess.run(
                 ['python', 'scripts/fetch_nse_top_500.py'],
-                cwd='/home/user/TraDc',
                 capture_output=True,
                 text=True
             )
