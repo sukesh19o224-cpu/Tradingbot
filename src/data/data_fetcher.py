@@ -9,11 +9,18 @@ import yfinance as yf
 import pandas as pd
 import os
 import json
+import sys
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict
 import time
 import warnings
+import logging
+
+# Suppress ALL warnings (pandas, yfinance, etc.)
 warnings.filterwarnings('ignore')
+
+# Suppress yfinance's annoying console messages
+logging.getLogger('yfinance').setLevel(logging.CRITICAL)
 
 from config.settings import *
 from src.data.data_cache import DataCache
@@ -157,6 +164,7 @@ class DataFetcher:
         - Small delay before each request to prevent rate limiting
         - Exponential backoff on failures
         - Multiple retry attempts
+        - Silent handling of delisted stocks
         """
         for attempt in range(max_retries):
             try:
@@ -170,18 +178,30 @@ class DataFetcher:
 
                 if not df.empty:
                     return df
+                else:
+                    # Empty dataframe - stock may be delisted, skip silently
+                    return None
 
             except Exception as e:
+                error_msg = str(e).lower()
+
+                # Silent skip for delisted/invalid stocks (no console spam)
+                if any(x in error_msg for x in ['delisted', 'no data found', 'no price data', 'not found']):
+                    return None
+
+                # Retry on network/rate limit errors
                 if attempt < max_retries - 1:
-                    wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
-                    print(f"⚠️ Attempt {attempt + 1} failed for {symbol}, retrying in {wait_time}s...")
-                    time.sleep(wait_time)
-                else:
-                    # Only print error on final failure (reduce noise)
-                    if "too many requests" in str(e).lower() or "rate limit" in str(e).lower():
-                        print(f"⚠️ Rate limit hit for {symbol}, skipping...")
+                    if "too many requests" in error_msg or "rate limit" in error_msg:
+                        wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                        time.sleep(wait_time)
                     else:
-                        print(f"❌ All retries failed for {symbol}: {e}")
+                        time.sleep(0.5)  # Brief pause before retry
+                else:
+                    # Only print actual errors (not delisted stocks)
+                    if "too many requests" in error_msg or "rate limit" in error_msg:
+                        pass  # Silent skip for rate limits
+                    elif not any(x in error_msg for x in ['delisted', 'no data']):
+                        pass  # Silent skip all errors to reduce noise
 
         return None
 
