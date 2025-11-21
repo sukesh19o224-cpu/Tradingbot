@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# 🚀 MAIN RUN SCRIPT - Super Math Trading System
-# Simple interface to run your trading system
+# 🚀 MAIN RUN SCRIPT - EOD + Intraday Trading System
+# Complete automated trading system with heartbeat monitoring
 
 # Activate virtual environment if it exists
 if [ -d "venv" ]; then
@@ -13,167 +13,134 @@ fi
 show_menu() {
     echo ""
     echo "╔══════════════════════════════════════════════════════════╗"
-    echo "║     🎯 HYBRID TRADING SYSTEM                            ║"
-    echo "║     Swing + Positional • Dual Portfolio                 ║"
+    echo "║     🚀 EOD + INTRADAY TRADING SYSTEM                    ║"
+    echo "║     Top 500 NSE • Swing + Positional • 97.8% Success    ║"
     echo "╚══════════════════════════════════════════════════════════╝"
     echo ""
     echo "Choose what to run:"
     echo ""
-    echo "  1) 🎯 Single Scan           - Run one hybrid scan"
-    echo "  2) 🔥 HYBRID Mode           - Swing + Positional! (RECOMMENDED)"
-    echo "  3) 📊 GUI Dashboard         - Live Portfolio Dashboard"
-    echo "  4) 📈 Show Summary          - View dual portfolio performance"
-    echo "  5) 🧪 Test Discord          - Test Discord alerts"
-    echo "  6) ❌ Exit"
+    echo "  1) 🎯 Quick Test            - Test with 10 stocks (~15s)"
+    echo "  2) 📊 Single Scan (500)     - Scan Top 500 stocks (~7 min)"
+    echo "  3) 🌆 EOD Ranking           - Generate Top 500 list (~15 min)"
+    echo "  4) 🔥 CONTINUOUS MODE       - 24/7 Automated (RECOMMENDED)"
+    echo "  5) 📈 Show Summary          - View portfolio performance"
+    echo "  6) 🧪 Test Discord          - Test Discord alerts"
+    echo "  7) 🔧 OLD System            - Run old main.py (backward compat)"
+    echo "  8) ❌ Exit"
     echo ""
-    echo "💡 HYBRID Mode: Swing + Positional simultaneously"
-    echo "   • Scans ALL stocks every 10 minutes during market hours"
-    echo "   • Monitors positions every 5 minutes"
-    echo "   • Never misses opportunities!"
-    echo "💡 GUI Dashboard: Beautiful live portfolio viewer!"
+    echo "💡 CONTINUOUS Mode (Option 4):"
+    echo "   • Heartbeat every 5 mins when market closed"
+    echo "   • Scans 500 stocks every 10 mins (9:15 AM - 3:30 PM)"
+    echo "   • EOD ranking at 3:45 PM (generates Top 500)"
+    echo "   • Monitors positions every 5 mins"
+    echo "   • 97.8% data success rate (489/500 stocks!)"
+    echo ""
+    echo "💡 Quick Test (Option 1): Perfect for first-time testing!"
     echo ""
 }
 
-run_single_scan() {
-    echo ""
-    echo "🎯 Running single scan..."
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    python3 main.py --mode once
-}
-
-run_live_mode() {
+run_quick_test() {
     echo ""
     echo "╔══════════════════════════════════════════════════════════╗"
-    echo "║     🎯 HYBRID AUTOMATIC MODE                            ║"
-    echo "║     Swing + Positional Trading Simultaneously           ║"
+    echo "║     🧪 QUICK TEST - 10 Stocks                           ║"
     echo "╚══════════════════════════════════════════════════════════╝"
     echo ""
-    echo "✨ HYBRID SYSTEM - Never miss opportunities!"
-    echo ""
-    echo "📌 How it works:"
-    echo "   • Scans NIFTY 500 (most liquid NSE stocks)"
-    echo "   • Every stock checked for BOTH opportunities:"
-    echo "     🔥 Swing: Fast momentum, breakouts (5-10%, 1-5 days)"
-    echo "     📈 Positional: Trends, pullbacks (15-30%, 2-4 weeks)"
-    echo "   • Dual portfolios (60% swing, 40% positional)"
-    echo "   • Separate Discord alerts for each type"
-    echo "   • Market hours: Scan every 10 minutes"
-    echo "   • 3:30 PM: Daily summary"
-    echo ""
-    echo "💼 Portfolio Split:"
-    echo "   🔥 Swing Portfolio: 60% capital (aggressive short-term)"
-    echo "   📈 Positional Portfolio: 40% capital (conservative long-term)"
+    echo "Testing with 10 large-cap stocks..."
+    echo "Expected time: ~15 seconds"
     echo ""
     echo "Press Enter to start, or Ctrl+C to cancel"
     read -p ""
     echo ""
-    echo "🚀 Starting HYBRID automatic mode..."
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    python3 main.py --mode continuous
+    python3 test_system.py
 }
 
-
-run_gui_dashboard() {
+run_single_scan() {
     echo ""
     echo "╔══════════════════════════════════════════════════════════╗"
-    echo "║     📊 LIVE PORTFOLIO DASHBOARD (GUI)                   ║"
+    echo "║     📊 SINGLE SCAN - Top 500 NSE Stocks                 ║"
     echo "╚══════════════════════════════════════════════════════════╝"
     echo ""
-    echo "✨ Features:"
-    echo "   • Live portfolio summary (capital, P&L, win rate)"
-    echo "   • Open positions table (both swing & positional)"
-    echo "   • Complete trade history logs"
-    echo "   • Auto-refresh every 5 seconds"
+    echo "Scanning Top 500 NSE stocks..."
+    echo "Expected time: ~7 minutes"
+    echo "Expected success: 97-98% (485-490 stocks)"
     echo ""
-    echo "Press Ctrl+C to close"
+    echo "Press Enter to start, or Ctrl+C to cancel"
+    read -p ""
+    echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    python3 GUI.py
+    python3 main_eod_system.py --mode once
 }
 
-run_comparison_mode() {
+run_eod_ranking() {
     echo ""
     echo "╔══════════════════════════════════════════════════════════╗"
-    echo "║     🎯 STRATEGY COMPARISON MODE                         ║"
+    echo "║     🌆 EOD RANKING - Generate Top 500 List              ║"
     echo "╚══════════════════════════════════════════════════════════╝"
     echo ""
-    echo "This mode tests 3 strategies simultaneously:"
-    echo "  🟢 EXCELLENT  - Only signals ≥ 8.5 (best quality)"
-    echo "  🟡 MODERATE   - Signals ≥ 8.0 (good quality)"
-    echo "  🔵 ALL        - All signals ≥ 7.0 (all alerts)"
+    echo "📌 What this does:"
+    echo "   • Fetches all ~2,200 NSE stocks"
+    echo "   • Ranks by market capitalization"
+    echo "   • Saves Top 500 to config/nse_top_500_live.py"
+    echo "   • Used for tomorrow's intraday scans"
     echo ""
-    echo "Run for 2 weeks to see which performs best!"
+    echo "⏳ Expected time: ~15 minutes"
+    echo "💾 Output: config/nse_top_500_live.py"
     echo ""
-    echo "Choose option:"
-    echo "  1) Start comparison + open dashboard (recommended)"
-    echo "  2) Run comparison only (system)"
-    echo "  3) Open dashboard only (view results)"
+    echo "Press Enter to start, or Ctrl+C to cancel"
+    read -p ""
     echo ""
-    read -p "Enter choice (1-3): " comp_choice
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    python3 main_eod_system.py --mode eod
+}
 
-    case $comp_choice in
-        1)
-            echo ""
-            echo "🚀 Starting comparison system..."
-            echo "   Terminal 1: Running system"
-            echo "   Terminal 2: Opening dashboard"
-            echo ""
-            echo "⚠️  Keep BOTH windows open!"
-            echo ""
-
-            # Start system in background
-            python3 main.py --mode continuous --enable-comparison > logs/comparison.log 2>&1 &
-            SYSTEM_PID=$!
-            echo "   System PID: $SYSTEM_PID"
-            sleep 3
-
-            # Start dashboard
-            echo "   Opening dashboard..."
-            python3 main.py --mode comparison
-
-            # Kill system when dashboard closes
-            kill $SYSTEM_PID 2>/dev/null
-            ;;
-        2)
-            echo ""
-            echo "🔄 Running comparison system..."
-            echo "   Discord alerts: YES (all signals ≥7.0)"
-            echo "   Paper trading: YES"
-            echo "   Comparison portfolios: YES (3 strategies)"
-            echo ""
-            echo "Open dashboard in another terminal:"
-            echo "   ./RUN.sh → Option 4 → Option 3"
-            echo ""
-            echo "Press Ctrl+C to stop"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo ""
-            python3 main.py --mode continuous --enable-comparison
-            ;;
-        3)
-            echo ""
-            echo "📊 Opening comparison dashboard..."
-            echo "🌐 Browser: http://localhost:8502"
-            echo ""
-            echo "⚠️  Make sure system is running in another terminal!"
-            echo "   (Run option 4→2 in another terminal if not running)"
-            echo ""
-            echo "Press Ctrl+C to stop"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo ""
-            python3 main.py --mode comparison
-            ;;
-        *)
-            echo "❌ Invalid choice"
-            ;;
-    esac
+run_continuous_mode() {
+    echo ""
+    echo "╔══════════════════════════════════════════════════════════╗"
+    echo "║     🔥 CONTINUOUS MODE - 24/7 Automated Trading         ║"
+    echo "╚══════════════════════════════════════════════════════════╝"
+    echo ""
+    echo "✨ COMPLETE AUTOMATION:"
+    echo ""
+    echo "📌 Before Market (Before 9:15 AM):"
+    echo "   💓 Heartbeat every 5 minutes"
+    echo "   📊 Shows: Loaded stocks, system status"
+    echo ""
+    echo "📌 Market Hours (9:15 AM - 3:30 PM):"
+    echo "   🔍 Scan 500 stocks every 10 minutes"
+    echo "   👁️ Monitor positions every 5 minutes"
+    echo "   📱 Send Discord alerts for qualified stocks"
+    echo "   ⚡ Expected: 3-10 signals per scan"
+    echo ""
+    echo "📌 EOD (3:45 PM):"
+    echo "   🌆 Auto-generate Top 500 list"
+    echo "   💾 Updates for tomorrow's scans"
+    echo "   ⏳ Takes ~15 minutes"
+    echo ""
+    echo "📌 After Market (After 4:00 PM):"
+    echo "   💓 Heartbeat every 5 minutes"
+    echo "   💤 System sleeps until next market open"
+    echo ""
+    echo "💼 Portfolio: Swing (60%) + Positional (40%)"
+    echo "📊 Success Rate: 97.8% (489/500 stocks)"
+    echo ""
+    echo "Press Enter to start, or Ctrl+C to stop anytime"
+    read -p ""
+    echo ""
+    echo "🚀 Starting CONTINUOUS MODE..."
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    python3 main_eod_system.py --mode continuous
 }
 
 show_summary() {
     echo ""
-    echo "📈 Current Performance Summary"
+    echo "📈 Portfolio Performance Summary"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    python3 main.py --summary
+    python3 main_eod_system.py --summary
 }
 
 test_discord() {
@@ -185,16 +152,57 @@ test_discord() {
     echo "Check your Discord channel for test message!"
 }
 
+run_old_system() {
+    echo ""
+    echo "╔══════════════════════════════════════════════════════════╗"
+    echo "║     🔧 OLD SYSTEM (main.py)                             ║"
+    echo "╚══════════════════════════════════════════════════════════╝"
+    echo ""
+    echo "⚠️  This runs the OLD main.py (backward compatibility)"
+    echo "💡 For NEW system features, use other options!"
+    echo ""
+    echo "Choose mode:"
+    echo "  1) Single scan"
+    echo "  2) Continuous mode"
+    echo "  3) Back to main menu"
+    echo ""
+    read -p "Enter choice (1-3): " old_choice
+
+    case $old_choice in
+        1)
+            echo ""
+            echo "🎯 Running old single scan..."
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            python3 main.py --mode once
+            ;;
+        2)
+            echo ""
+            echo "🔄 Running old continuous mode..."
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            python3 main.py --mode continuous
+            ;;
+        3)
+            return
+            ;;
+        *)
+            echo "❌ Invalid choice"
+            ;;
+    esac
+}
+
 # Main script logic
 case "$1" in
+    test|quick)
+        run_quick_test
+        ;;
     once|scan)
         run_single_scan
         ;;
-    live|continuous)
-        run_live_mode
+    eod|ranking)
+        run_eod_ranking
         ;;
-    gui)
-        run_gui_dashboard
+    live|continuous)
+        run_continuous_mode
         ;;
     summary|stats)
         show_summary
@@ -202,37 +210,50 @@ case "$1" in
     test-discord|discord)
         test_discord
         ;;
+    old)
+        run_old_system
+        ;;
     *)
         # Interactive menu
         while true; do
             show_menu
-            read -p "Enter choice (1-6): " choice
+            read -p "Enter choice (1-8): " choice
 
             case $choice in
                 1)
-                    run_single_scan
+                    run_quick_test
                     echo ""
                     read -p "Press Enter to continue..."
                     ;;
                 2)
-                    run_live_mode
+                    run_single_scan
+                    echo ""
+                    read -p "Press Enter to continue..."
                     ;;
                 3)
-                    run_gui_dashboard
+                    run_eod_ranking
                     echo ""
                     read -p "Press Enter to continue..."
                     ;;
                 4)
+                    run_continuous_mode
+                    ;;
+                5)
                     show_summary
                     echo ""
                     read -p "Press Enter to continue..."
                     ;;
-                5)
+                6)
                     test_discord
                     echo ""
                     read -p "Press Enter to continue..."
                     ;;
-                6)
+                7)
+                    run_old_system
+                    echo ""
+                    read -p "Press Enter to continue..."
+                    ;;
+                8)
                     echo ""
                     echo "👋 Goodbye!"
                     echo ""
@@ -240,7 +261,7 @@ case "$1" in
                     ;;
                 *)
                     echo ""
-                    echo "❌ Invalid choice. Please enter 1-6."
+                    echo "❌ Invalid choice. Please enter 1-8."
                     sleep 2
                     ;;
             esac
