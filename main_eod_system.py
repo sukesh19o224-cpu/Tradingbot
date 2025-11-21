@@ -265,28 +265,39 @@ class EODIntradaySystem:
         Run system continuously
 
         Schedule:
-        - 3:45 PM: EOD ranking (generate Top 500)
+        - Before Market: Heartbeat every 5 minutes
         - 9:15 AM - 3:30 PM: Intraday scans (every 10 minutes)
-        - Position monitoring: Every 5 minutes
+        - 3:45 PM: EOD ranking (generate Top 500)
+        - After Market: Heartbeat every 5 minutes
         """
         print("\n🔄 Starting EOD + INTRADAY System...")
+        print("=" * 70)
         print(f"📊 Stock Universe: {len(self.stocks)} stocks")
         print(f"⏰ Intraday Scan: Every {SCAN_INTERVAL_MINUTES} minutes (9:15 AM - 3:30 PM)")
         print(f"🌆 EOD Ranking: 3:45 PM (generates Top 500 for next day)")
         print(f"👁️ Position Monitor: Every {POSITION_MONITOR_INTERVAL} minutes")
+        print(f"💓 Heartbeat: Every 5 minutes (when market closed)")
+        print("=" * 70)
         print("\nPress Ctrl+C to stop\n")
 
         self.is_running = True
         last_scan_time = None
         last_monitor_time = None
+        last_heartbeat_time = None
 
         try:
             while self.is_running:
                 current_time = datetime.now(IST).time()
                 current_date = datetime.now(IST).date()
 
+                # Define market hours
+                market_open = dt_time(9, 15)
+                market_close = dt_time(15, 30)
+                eod_start = dt_time(15, 45)
+                eod_end = dt_time(16, 0)
+
                 # EOD RANKING (3:45 PM - once per day)
-                if dt_time(15, 45) <= current_time < dt_time(16, 0):
+                if eod_start <= current_time < eod_end:
                     if not self.eod_done_today:
                         self.run_eod_ranking()
                         self.eod_done_today = True
@@ -295,13 +306,8 @@ class EODIntradaySystem:
                 if current_time < dt_time(0, 5):
                     self.eod_done_today = False
 
-                # INTRADAY SCANNING (9:15 AM - 3:30 PM)
-                market_open = dt_time(9, 15)
-                market_close = dt_time(15, 30)
-
+                # MARKET HOURS - Active Trading
                 if market_open <= current_time <= market_close:
-                    print(f"\n🟢 Market OPEN")
-
                     # Run intraday scan
                     if (last_scan_time is None or
                             (datetime.now() - last_scan_time).seconds >= SCAN_INTERVAL_MINUTES * 60):
@@ -320,11 +326,22 @@ class EODIntradaySystem:
                     # Small sleep
                     time.sleep(30)
 
+                # OUTSIDE MARKET HOURS - Heartbeat Mode
                 else:
-                    # Outside market hours
-                    print(f"\n💤 Market CLOSED - Sleeping...")
-                    print(f"⏰ Next market open: 9:15 AM IST")
-                    time.sleep(1800)  # Sleep 30 minutes
+                    # Show heartbeat every 5 minutes
+                    if (last_heartbeat_time is None or
+                            (datetime.now() - last_heartbeat_time).seconds >= 300):  # 5 minutes
+
+                        print(f"\n💤 Market CLOSED - System Active")
+                        print(f"⏰ {self._get_ist_time()}")
+                        print(f"📊 Loaded: {len(self.stocks)} stocks")
+                        print(f"🔄 Next market open: 9:15 AM IST")
+                        print(f"💓 Heartbeat: System running normally...")
+
+                        last_heartbeat_time = datetime.now()
+
+                    # Sleep for 60 seconds before next check
+                    time.sleep(60)
 
         except KeyboardInterrupt:
             print("\n\n⏹️ Stopping system...")
