@@ -1,373 +1,302 @@
 """
-🚀 MULTI-STRATEGY TRADING SYSTEM V4.0 - SETTINGS
-Complete configuration file with descriptions
-Last Updated: 2025-11-11
+🎯 SUPER MATH TRADING SYSTEM - Configuration
+Maximum Realistic Profit with Advanced Mathematical Models
 """
 
 import os
 from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
 
-# ============================================
-# 💰 CAPITAL MANAGEMENT
-# ============================================
+# ═══════════════════════════════════════════════════════════════
+# 💰 CAPITAL & PORTFOLIO SETTINGS
+# ═══════════════════════════════════════════════════════════════
+
 INITIAL_CAPITAL = 100000  # Starting capital (₹)
+PAPER_TRADING_CAPITAL = 100000  # Paper trading capital
 
-# ============================================
-# 🛡️ RISK MANAGEMENT
-# ============================================
-MAX_RISK_PER_TRADE = 0.015      # 1.5% risk per trade (how much you can lose per position)
-MAX_DAILY_LOSS = 0.06           # 6% max loss per day (stops trading if hit)
-MAX_DRAWDOWN_PERCENT = 0.15     # 15% max drawdown (pauses trading if capital drops this much)
+# ═══════════════════════════════════════════════════════════════
+# 🎯 RISK MANAGEMENT (Kelly Criterion Based)
+# ═══════════════════════════════════════════════════════════════
 
-# ============================================
-# 🎯 ENHANCED EXIT MANAGEMENT (NEW!)
-# ============================================
-# Trailing Stop Configuration
-TRAILING_STOP_CONFIG = {
-    'enabled': True,                    # Enable enhanced trailing stops
-    'start_profit': 0.02,              # Start trailing at +2% profit
-    'trail_distance': 0.015,           # Trail 1.5% below peak price
-    'aggressive_trail_at': 0.05,       # More aggressive trailing at +5%
-    'aggressive_distance': 0.025       # Trail 2.5% below peak at high profits
+# Position Sizing
+KELLY_FRACTION = 0.25  # Use 1/4 Kelly (conservative)
+MAX_RISK_PER_TRADE = 0.02  # 2% max risk per trade
+MAX_PORTFOLIO_RISK = 0.15  # 15% max drawdown
+
+# Position Limits
+MAX_POSITIONS = 10  # Maximum concurrent positions
+MAX_POSITION_SIZE = 0.25  # 25% max per position
+MAX_SECTOR_EXPOSURE = 0.40  # 40% max per sector
+
+# Market Circuit Breaker (Exit all positions if market crashes)
+MARKET_CRASH_THRESHOLD = -0.02  # -2% - Exit all if NIFTY down >2%
+NIFTY_SYMBOL = "^NSEI"  # NIFTY 50 index symbol
+TRAILING_STOP_ACTIVATION = 0.05  # Activate trailing stop at +5%
+TRAILING_STOP_DISTANCE = 0.03  # Trail by 3%
+
+# Stop Loss & Targets
+SWING_STOP_LOSS = 0.02  # 2% stop loss for swing
+POSITIONAL_STOP_LOSS = 0.05  # 5% stop loss for positional
+
+SWING_TARGETS = [0.03, 0.08, 0.12]  # 3%, 8%, 12% targets
+POSITIONAL_TARGETS = [0.12, 0.20, 0.30]  # 12%, 20%, 30% targets
+
+# ═══════════════════════════════════════════════════════════════
+# 📊 TECHNICAL INDICATORS SETTINGS
+# ═══════════════════════════════════════════════════════════════
+
+# Moving Averages
+EMA_PERIODS = [8, 13, 21, 50, 100, 200]
+SMA_PERIODS = [20, 50, 200]
+
+# RSI Settings
+RSI_PERIOD = 14
+RSI_OVERBOUGHT = 75
+RSI_OVERSOLD = 30
+RSI_BULLISH_THRESHOLD = 50
+
+# MACD Settings
+MACD_FAST = 12
+MACD_SLOW = 26
+MACD_SIGNAL = 9
+
+# Bollinger Bands
+BB_PERIOD = 20
+BB_STD = 2
+
+# ADX Settings
+ADX_PERIOD = 14
+ADX_STRONG_TREND = 25
+ADX_VERY_STRONG = 50
+
+# Volume Settings
+VOLUME_MA_PERIOD = 20
+VOLUME_SURGE_MULTIPLIER = 1.5
+
+# ═══════════════════════════════════════════════════════════════
+# 🔬 ADVANCED MATHEMATICAL INDICATORS
+# ═══════════════════════════════════════════════════════════════
+
+# Fibonacci Retracements
+FIBONACCI_LEVELS = [0.236, 0.382, 0.5, 0.618, 0.786]
+FIBONACCI_EXTENSIONS = [1.272, 1.618, 2.618]
+
+# Elliott Wave
+ELLIOTT_WAVE_ENABLED = True
+MIN_WAVE_BARS = 5  # Minimum bars for wave identification
+
+# Gann Theory
+GANN_ANGLES = [1, 2, 3, 4, 8]  # 1x1, 1x2, 1x3, 1x4, 1x8
+GANN_SQUARE_OF_9_ENABLED = True
+
+# ═══════════════════════════════════════════════════════════════
+# 🤖 MACHINE LEARNING SETTINGS
+# ═══════════════════════════════════════════════════════════════
+
+# LSTM Model
+LSTM_ENABLED = True
+LSTM_SEQUENCE_LENGTH = 60  # 60 days lookback
+LSTM_PREDICTION_DAYS = 10  # Predict next 10 days
+LSTM_CONFIDENCE_THRESHOLD = 0.70  # 70% confidence minimum
+
+# Feature Engineering
+ML_FEATURES = [
+    'close', 'volume', 'rsi', 'macd', 'bb_position',
+    'adx', 'ema_8', 'ema_21', 'momentum_5d', 'momentum_20d'
+]
+
+# ═══════════════════════════════════════════════════════════════
+# 🎯 SIGNAL GENERATION
+# ═══════════════════════════════════════════════════════════════
+
+# Scoring System (0-10)
+MIN_SIGNAL_SCORE = 7.0  # Minimum score to generate alert
+HIGH_QUALITY_SCORE = 8.5  # High quality signal threshold
+
+# Signal Filtering (Prevent signal flood)
+MAX_SWING_SIGNALS_PER_SCAN = 5  # Max swing signals to process per scan
+MAX_POSITIONAL_SIGNALS_PER_SCAN = 3  # Max positional signals to process per scan
+
+# Dynamic Capital Allocation (By Signal Type)
+# DISABLED: Focus on signal quality, not signal type
+DYNAMIC_ALLOCATION_ENABLED = False  # Disabled - use quality-based allocation only
+MEAN_REVERSION_CAPITAL_PCT = 0.70  # 70% capital for mean reversion (common)
+MOMENTUM_CAPITAL_PCT = 0.20  # 20% capital for momentum (less common)
+BREAKOUT_CAPITAL_PCT = 0.10  # 10% capital for breakout (rare but valuable)
+
+# Smart P&L-Based Position Replacement
+# Exit weak positions (losing/low-profit) to free capital for high-quality new signals
+AUTO_EXIT_WEAK_FOR_QUALITY = True  # Exit weakest position for high-quality signals
+QUALITY_REPLACEMENT_THRESHOLD = 8.5  # Only replace if new signal score >= 8.5
+MIN_SCORE_DIFFERENCE = 0.5  # New signal must be at least 0.5 points better than weakest
+
+# Signal Weights
+WEIGHTS = {
+    'technical': 0.40,  # Technical indicators weight
+    'mathematical': 0.30,  # Fibonacci, Elliott, Gann weight
+    'ml_prediction': 0.20,  # ML model weight
+    'volume': 0.10  # Volume analysis weight
 }
 
-# Smart Loss Management
-LOSS_RECOVERY_CONFIG = {
-    'enabled': True,                    # Enable recovery detection
-    'check_higher_lows': True,         # Check for higher low pattern
-    'check_volume_increase': True,     # Check for increasing volume
-    'check_rsi_turning': True,         # Check for RSI turning up
-    'min_signals_for_hold': 2,         # Need 2+ signals to hold longer
-    'max_hold_days': 5,                # Maximum 5 days
-    'early_exit_no_recovery': False    # Disabled - no day 3 exit
-}
+# ═══════════════════════════════════════════════════════════════
+# 📈 STRATEGY SETTINGS
+# ═══════════════════════════════════════════════════════════════
 
-# ============================================
-# 📊 POSITION LIMITS
-# ============================================
-MAX_POSITIONS = 15              # Maximum total open positions at once (increased for better capital use)
-MAX_ENTRIES_PER_DAY = 10        # Maximum new entries in one day
-MAX_PER_STOCK = 0.25            # Maximum 25% capital per single stock
+# Swing Trading (3-15 days)
+SWING_HOLD_DAYS_MIN = 3
+SWING_HOLD_DAYS_MAX = 15
+SWING_ENABLED = True
 
-# ============================================
-# 🔄 DYNAMIC CAPITAL ALLOCATION (NEW!)
-# ============================================
-ENABLE_DYNAMIC_ALLOCATION = True    # Enable smart capital reallocation
-DYNAMIC_ALLOCATION_CONFIG = {
-    'max_capital_utilization': 0.90,    # Use up to 90% of capital
-    'reallocation_threshold': 0.15,     # Reallocate if need 15%+ more capital
-    'min_profit_to_keep': 0.02,         # Keep positions with 2%+ profit
-    'max_loss_to_exit': -0.02,          # Exit losing positions > -2%
-    'allow_strategy_switching': True    # Allow exiting low-priority positions
-}
+# Positional Trading (weeks to months)
+POSITIONAL_HOLD_DAYS_MIN = 20
+POSITIONAL_HOLD_DAYS_MAX = 90
+POSITIONAL_ENABLED = True
 
-# ============================================
-# 📈 STOCK FILTERS (Applied to ALL strategies)
-# ============================================
-MIN_PRICE = 20                  # Minimum stock price (₹)
-MAX_PRICE = 10000              # Maximum stock price (₹)
-MIN_VOLUME_CR = 2              # Minimum daily volume (in crores)
-MIN_DAILY_MOVE = 0.8           # Minimum daily price movement (%)
+# ═══════════════════════════════════════════════════════════════
+# 📊 STOCK UNIVERSE
+# ═══════════════════════════════════════════════════════════════
 
-# ============================================
-# ⏰ TIMING SETTINGS
-# ============================================
-MARKET_OPEN = "09:15"          # Market opening time (IST)
-MARKET_CLOSE = "15:30"         # Market closing time (IST)
-SCAN_TIME = "15:45"            # EOD scan time (IST) - Builds watchlist for next day
+# NSE Stock Selection
+NSE_INDEX = 'NIFTY200'  # Scan NIFTY 200 stocks
+MIN_MARKET_CAP = 1000  # Minimum 1000 crore market cap
+MIN_PRICE = 50  # Minimum stock price
+MAX_PRICE = 5000  # Maximum stock price
 
-ENABLE_MORNING_CHECK = True    # Enable morning entry checks
-MORNING_CHECK_TIMES = ["09:15", "09:45"]  # Pre-market entry checks
+# Liquidity Filters
+MIN_AVG_VOLUME = 100000  # Minimum average daily volume
+MIN_VALUE_TRADED = 5000000  # Minimum ₹50 lakh daily turnover
 
-# Monitoring intervals (in minutes)
-POSITION_MONITOR_INTERVAL = 3   # How often to check stops/targets (3 min = 20 checks/hour)
-SCAN_INTERVAL = 10              # How often to scan for new opportunities (10 min = 6 scans/hour)
+# Fundamental Filters
+MAX_DEBT_TO_EQUITY = 1.5
+MIN_ROE = 10  # Minimum 10% ROE
 
-# ============================================
-# 🎯 REGIME DETECTION
-# ============================================
-# System detects market condition and activates appropriate strategy
-ENABLE_REGIME_DETECTION = True  # True = Auto-switch strategies based on market
-                                # False = Run all strategies always
+# ═══════════════════════════════════════════════════════════════
+# 📱 DISCORD ALERTS
+# ═══════════════════════════════════════════════════════════════
 
-REGIME_LOOKBACK_DAYS = 20      # Days of data to analyze for regime
-REGIME_CHECK_INTERVAL = 60     # How often to check regime (minutes)
-
-REGIME_INDICATORS = {
-    'ADX_PERIOD': 14,                    # Period for ADX calculation
-    'ADX_TRENDING_THRESHOLD': 25,        # Above this = trending market
-    'VOLATILITY_LOOKBACK': 20,           # Days to calculate volatility
-    'MA_PERIODS': [20, 50]               # Moving average periods to check
-}
-
-# ============================================
-# 🚀 STRATEGY 1: MOMENTUM
-# ============================================
-# For trending/bull markets
-# Buys stocks with strong upward momentum and volume
-
-MOMENTUM = {
-    # Entry criteria
-    'MIN_5D_MOMENTUM': 3.0,              # Stock must be up 3%+ in last 5 days
-    'MIN_20D_MOMENTUM': 5.0,             # Stock must be up 5%+ in last 20 days
-    'MIN_VOLUME_RATIO': 1.5,             # Volume must be 1.5x above average
-    'MAX_GAP_UP': 0.03,                  # Reject if gap up > 3% (too risky)
-    'REQUIRE_MA_ALIGNMENT': True,        # Must be above MA20 and MA50
-    'REQUIRE_WEEKLY_BULLISH': False,     # Weekly trend must also be bullish
-    'MIN_TREND_STRENGTH': 50,            # Trend strength score (0-100)
-    
-    # Exit criteria
-    'TARGETS': [0.05, 0.08, 0.12],       # Target levels: 5%, 8%, 12%
-    'STOP_LOSS': 0.07,                   # Stop loss: 7% below entry
-    'TIME_STOP_DAYS': 5,                 # Exit after 5 trading days if no momentum
-    
-    # Position limits (Dynamic: Adjusts based on regime)
-    'max_positions': 10,                 # Max 10 momentum positions (was 3)
-    'min_score': 35,                     # Minimum score to qualify (lowered)
-    
-    # Capital allocation (if not using regime detection)
-    'capital_allocation': 0.40,          # 40% of capital for momentum
-    
-    # When to use this strategy
-    'market_regimes': ['TRENDING_UP', 'STRONG_BULL']
-}
-
-# ============================================
-# 🔄 STRATEGY 2: MEAN REVERSION
-# ============================================
-# For choppy/ranging markets
-# Buys quality stocks that have temporarily dipped
-
-MEAN_REVERSION = {
-    # Entry criteria
-    'MAX_DISTANCE_FROM_MA': 0.05,        # Stock 2-5% below MA20
-    'MIN_DISTANCE_FROM_MA': 0.02,        # At least 2% below MA20
-    'REQUIRE_ABOVE_MA50': True,          # Must be above MA50 (quality filter)
-    'MAX_RSI': 35,                       # RSI below 35 (oversold)
-    'MIN_SUPPORT_BOUNCES': 2,            # Bounced at support 2+ times
-    'ENTRY_BELOW_MA': True,              # Entry when below MA20
-    
-    # Exit criteria
-    'TARGETS': [0.03, 0.05, 0.08],       # Target levels: 3%, 5%, 8%
-    'STOP_LOSS': 0.05,                   # Stop loss: 5% below entry
-    'TIME_STOP_DAYS': 5,                 # Exit after 5 days (was 3) - allow time to develop
-    
-    # Position limits (Dynamic: Adjusts based on regime)
-    'max_positions': 12,                 # Max 12 mean reversion positions (was 3)
-    'min_score': 35,                     # Minimum score to qualify (lowered from 40)
-    
-    # Capital allocation (if not using regime detection)
-    'capital_allocation': 0.35,          # 35% of capital for mean reversion
-    
-    # When to use this strategy
-    'market_regimes': ['CHOPPY', 'RANGING', 'WEAK']
-}
-
-# ============================================
-# 💥 STRATEGY 3: BREAKOUT
-# ============================================
-# For consolidation periods
-# Buys stocks breaking out of tight ranges
-
-BREAKOUT = {
-    # Entry criteria
-    'CONSOLIDATION_DAYS': 5,             # Must consolidate for 5+ days
-    'MAX_CONSOLIDATION_RANGE': 0.05,     # Range must be within 5%
-    'MIN_VOLUME_SURGE': 2.0,             # Volume 2x+ on breakout
-    'REQUIRE_ATR_EXPANSION': True,       # ATR must be expanding
-    'BREAKOUT_CONFIRMATION': 0.01,       # Must break 1% above high
-
-    # Exit criteria
-    'TARGETS': [0.06, 0.10, 0.15],       # Target levels: 6%, 10%, 15%
-    'STOP_LOSS': 0.06,                   # Stop loss: 6% below entry
-    'TIME_STOP_DAYS': 4,                 # Exit after 4 trading days if no momentum
-
-    # Position limits (Dynamic: Adjusts based on regime)
-    'max_positions': 5,                  # Max 5 breakout positions (was 2)
-    'min_score': 40,                     # Minimum score to qualify
-
-    # Capital allocation (if not using regime detection)
-    'capital_allocation': 0.25,          # 25% of capital for breakout
-
-    # When to use this strategy
-    'market_regimes': ['CONSOLIDATION', 'NEUTRAL']
-}
-
-# ============================================
-# 📈 STRATEGY 4: POSITIONAL/MONTHLY (NEW V5.0!)
-# ============================================
-# For medium to long-term trades (10-45 days)
-# Higher quality, longer holds, better win rate
-
-POSITIONAL = {
-    # Entry criteria (MORE STRINGENT than swing)
-    'MIN_UPTREND_DAYS': 20,              # Minimum 20 days in uptrend
-    'REQUIRE_MA_ALIGNMENT': True,        # Must be above MA50, MA100, MA200
-    'MIN_SHARPE_RATIO': 0.5,            # Minimum risk-adjusted returns
-    'MIN_PREDICTED_RETURN': 5.0,        # Minimum predicted return % (10 days)
-    'MIN_PREDICTION_CONFIDENCE': 60,    # Minimum prediction confidence %
-    'MAX_VOLATILITY': 60,               # Maximum volatility score (0-100)
-    'MIN_VOLUME_RATIO': 1.2,            # Volume vs average
-
-    # Exit criteria (WIDER than swing)
-    'TARGETS': [0.08, 0.15, 0.25],      # Target levels: 8%, 15%, 25%
-    'STOP_LOSS': 0.10,                  # Stop loss: 10% (wider for longer holds)
-    'MIN_HOLD_DAYS': 10,                # Minimum holding period
-    'MAX_HOLD_DAYS': 45,                # Maximum holding period
-    'DYNAMIC_TIME_STOP': True,          # Use dynamic time stops based on trend
-
-    # Position limits
-    'max_positions': 8,                 # Max 8 positional positions
-    'min_score': 50,                    # Higher minimum score (quality over quantity)
-
-    # Capital allocation
-    'capital_allocation': 0.30,         # 30% of capital for positional
-
-    # When to use this strategy
-    'market_regimes': ['TRENDING_UP', 'STRONG_BULL', 'NEUTRAL']  # Works in most conditions
-}
-
-# ============================================
-# 🎯 MULTI-STRATEGY CONFIGURATION
-# ============================================
-# Combine all strategies into one config
-STRATEGIES = {
-    'MOMENTUM': {
-        'enabled': True,                 # Enable/disable this strategy
-        'capital_allocation': MOMENTUM['capital_allocation'],
-        'max_positions': MOMENTUM['max_positions'],
-        'min_score': MOMENTUM['min_score'],
-        'market_regimes': MOMENTUM['market_regimes']
-    },
-    'MEAN_REVERSION': {
-        'enabled': True,
-        'capital_allocation': MEAN_REVERSION['capital_allocation'],
-        'max_positions': MEAN_REVERSION['max_positions'],
-        'min_score': MEAN_REVERSION['min_score'],
-        'market_regimes': MEAN_REVERSION['market_regimes']
-    },
-    'BREAKOUT': {
-        'enabled': True,
-        'capital_allocation': BREAKOUT['capital_allocation'],
-        'max_positions': BREAKOUT['max_positions'],
-        'min_score': BREAKOUT['min_score'],
-        'market_regimes': BREAKOUT['market_regimes']
-    },
-    'POSITIONAL': {
-        'enabled': True,                 # NEW V5.0: Monthly/positional trading
-        'capital_allocation': POSITIONAL['capital_allocation'],
-        'max_positions': POSITIONAL['max_positions'],
-        'min_score': POSITIONAL['min_score'],
-        'market_regimes': POSITIONAL['market_regimes']
-    }
-}
-
-# ============================================
-# 🎯 TARGET CONFIGURATION (For partial exits)
-# ============================================
-# NOT USED - Strategy-specific targets above are used instead
-# This is kept for backward compatibility
-TARGETS = {
-    'T1': {'level': 0.03, 'exit_percent': 0.40},  # Sell 40% at 3%
-    'T2': {'level': 0.05, 'exit_percent': 0.40},  # Sell 40% at 5%
-    'T3': {'level': 0.08, 'exit_percent': 0.20}   # Sell 20% at 8%
-}
-
-# ============================================
-# ⏰ TIME STOPS (For backward compatibility)
-# ============================================
-# NOT USED - Strategy-specific time stops above are used instead
-MAX_HOLD_DAYS = 5  # Maximum hold period
-
-# ============================================
-# 🔔 DISCORD ALERTS
-# ============================================
-# Get webhook URL from .env file
 DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL', '')
+DISCORD_ENABLED = bool(DISCORD_WEBHOOK_URL)
+DISCORD_MENTION_ON_HIGH_SCORE = True  # @everyone on score >= 8.5
 
-# To set up Discord alerts:
-# 1. Create .env file in project root
-# 2. Add: DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_WEBHOOK_HERE
-# 3. Restart system
+# Alert Frequency
+SEND_DAILY_SUMMARY = True
+SEND_WEEKLY_REPORT = True
+DAILY_SUMMARY_TIME = '15:45'  # 3:45 PM IST
 
-# ============================================
-# 📊 SCANNER SETTINGS
-# ============================================
-TOP_STOCKS = 20                # Top stocks from EOD scan for morning checks
-EOD_SCAN_LIMIT = 500          # How many stocks to save in daily watchlist
+# ═══════════════════════════════════════════════════════════════
+# 📊 PAPER TRADING
+# ═══════════════════════════════════════════════════════════════
 
-# Minimum score to consider (0-100)
-# Lower = more opportunities, Higher = better quality
-MIN_SCORE = 35
+PAPER_TRADING_ENABLED = True
+PAPER_TRADING_AUTO_EXECUTE = True  # Automatically execute signals in paper portfolio
+PAPER_TRADING_FILE = 'data/paper_portfolio.json'
 
-# ============================================
-# 🎯 SECTOR & CORRELATION FILTERS
-# ============================================
-# Prevent concentration in one sector or correlated stocks
-ENABLE_SECTOR_CHECK = True         # Set False to disable sector limits
-MAX_SECTOR_ALLOCATION = 0.50       # Max 50% capital in one sector (was 40%)
-ENABLE_CORRELATION_CHECK = True    # Set False to disable correlation checks
-MAX_CORRELATION = 0.70             # Reject if correlation > 0.70 with existing positions
-MIN_SECTOR_DIVERSITY = 2           # Need positions in at least 2 different sectors
+# ═══════════════════════════════════════════════════════════════
+# 🖥️ DASHBOARD
+# ═══════════════════════════════════════════════════════════════
 
-# ============================================
-# ⚡ MULTI-TIMEFRAME SETTINGS (NEW!)
-# ============================================
-# Uses both daily and 15-min candles for better entry timing
-ENABLE_MULTI_TIMEFRAME = True  # Enable 15-min confirmation
+DASHBOARD_ENABLED = True
+DASHBOARD_PORT = 8501
+DASHBOARD_HOST = '0.0.0.0'
+DASHBOARD_REFRESH_INTERVAL = 60  # Refresh every 60 seconds
 
-MTF_CANDLE_INTERVAL = '15m'    # Intraday timeframe (15m recommended)
-MTF_LOOKBACK_CANDLES = 10      # Number of 15-min candles to analyze
+# ═══════════════════════════════════════════════════════════════
+# ⏰ MARKET TIMING (IST)
+# ═══════════════════════════════════════════════════════════════
 
-# ============================================
-# 💾 DATA CACHING (NEW!)
-# ============================================
-# Speeds up scans from 3-5 min to 30 seconds
-ENABLE_CACHING = True          # Enable data caching
-CACHE_DIR = 'data/cache'       # Cache storage location
+MARKET_OPEN_TIME = '09:15'
+MARKET_CLOSE_TIME = '15:30'
+PRE_MARKET_SCAN_TIME = '09:00'
+POST_MARKET_SCAN_TIME = '15:45'
 
-# ============================================
-# 📅 TRADING DAYS CALCULATION (NEW!)
-# ============================================
-# Counts only trading days (Mon-Fri), excludes weekends
-USE_TRADING_DAYS = True        # True = Count only trading days
-                               # False = Count calendar days (includes weekends)
+# Scanning Intervals
+SCAN_INTERVAL_MINUTES = 10  # Scan every 10 minutes during market hours (safer for API limits)
+POSITION_MONITOR_INTERVAL = 5  # Monitor positions every 5 minutes
 
-# ============================================
-# 📝 IMPORTANT NOTES
-# ============================================
-"""
-QUICK TUNING GUIDE:
+# ═══════════════════════════════════════════════════════════════
+# 💾 DATA & CACHING
+# ═══════════════════════════════════════════════════════════════
 
-🎯 To get MORE opportunities:
-- Lower min_score values (35 → 30)
-- Increase max_positions (3 → 5)
-- Lower MIN_5D_MOMENTUM (3.0 → 2.0)
-- Raise MAX_RSI (35 → 40)
+CACHE_ENABLED = True
+CACHE_DURATION_MINUTES = 10  # Cache data for 10 minutes (matches scan interval)
+HISTORICAL_DATA_PERIOD = '6mo'  # 6 months historical data
 
-🎯 To get BETTER quality (fewer trades):
-- Raise min_score values (35 → 45)
-- Decrease max_positions (3 → 2)
-- Raise MIN_5D_MOMENTUM (3.0 → 4.0)
-- Lower MAX_RSI (35 → 30)
+# API Rate Limit Protection
+API_RETRY_ATTEMPTS = 3  # Retry failed API calls 3 times
+API_RETRY_DELAY = 2  # Wait 2 seconds between retries
+API_REQUEST_DELAY = 0.1  # 100ms delay between requests (prevents rate limiting)
 
-🎯 To be more AGGRESSIVE:
-- Increase MAX_RISK_PER_TRADE (0.015 → 0.02)
-- Increase MAX_POSITIONS (8 → 10)
-- Widen stop losses (0.07 → 0.08)
+DATA_FOLDER = 'data'
+CACHE_FOLDER = 'data/cache'
+LOGS_FOLDER = 'logs'
 
-🎯 To be more CONSERVATIVE:
-- Decrease MAX_RISK_PER_TRADE (0.015 → 0.01)
-- Decrease MAX_POSITIONS (8 → 5)
-- Tighten stop losses (0.07 → 0.05)
+# ═══════════════════════════════════════════════════════════════
+# 🧪 BACKTESTING
+# ═══════════════════════════════════════════════════════════════
 
-🎯 For faster monitoring (more API calls):
-- POSITION_MONITOR_INTERVAL = 1  # Every 1 min
-- SCAN_INTERVAL = 5              # Every 5 min
+BACKTEST_START_DATE = '2019-01-01'
+BACKTEST_END_DATE = '2024-12-31'
+BACKTEST_INITIAL_CAPITAL = 100000
 
-🎯 For slower monitoring (fewer API calls):
-- POSITION_MONITOR_INTERVAL = 5  # Every 5 min
-- SCAN_INTERVAL = 15             # Every 15 min
-"""
+# Performance Metrics Targets
+TARGET_SHARPE_RATIO = 2.0
+TARGET_MAX_DRAWDOWN = 0.15  # 15%
+TARGET_WIN_RATE = 0.55  # 55%
+TARGET_PROFIT_FACTOR = 2.0
+
+# ═══════════════════════════════════════════════════════════════
+# 🔧 SYSTEM SETTINGS
+# ═══════════════════════════════════════════════════════════════
+
+DEBUG_MODE = False
+LOG_LEVEL = 'INFO'  # DEBUG, INFO, WARNING, ERROR
+TIMEZONE = 'Asia/Kolkata'
+
+# API Settings
+MAX_API_RETRIES = 3
+API_TIMEOUT_SECONDS = 30
+
+# ═══════════════════════════════════════════════════════════════
+# 📋 STOCK WATCHLIST - COMPREHENSIVE MARKET COVERAGE
+# ═══════════════════════════════════════════════════════════════
+
+# Using Top 50 Working stocks by default (see config/nse_top_50_working.py)
+# System automatically loads from NSEStockFetcher - no manual import needed!
+
+# ═══════════════════════════════════════════════════════════════
+# 🎯 SCAN MODE: SIMPLE & RELIABLE
+# ═══════════════════════════════════════════════════════════════
+# System now uses Top 50 VERIFIED WORKING stocks by default
+# See: config/nse_top_50_working.py
+#
+# ✅ 50 stocks (Large Cap, High Liquidity)
+# ✅ ALL tested & working (Nov 2025)
+# ✅ 3 threads (ultra-safe)
+# ✅ ~2-3 min scan time
+# ✅ ZERO errors!
+# ═══════════════════════════════════════════════════════════════
+
+# Stock list loaded automatically by NSEStockFetcher
+# No manual watchlist configuration needed!
+
+# Sector Classification
+SECTORS = {
+    'IT': ['TCS.NS', 'INFY.NS', 'WIPRO.NS', 'HCLTECH.NS', 'TECHM.NS'],
+    'BANKING': ['HDFCBANK.NS', 'ICICIBANK.NS', 'KOTAKBANK.NS', 'SBIN.NS', 'AXISBANK.NS'],
+    'AUTO': ['MARUTI.NS', 'M&M.NS', 'TATAMOTORS.NS', 'BAJAJ-AUTO.NS'],
+    'PHARMA': ['SUNPHARMA.NS', 'DRREDDY.NS', 'CIPLA.NS'],
+    'FMCG': ['HINDUNILVR.NS', 'ITC.NS', 'NESTLEIND.NS', 'BRITANNIA.NS'],
+    'ENERGY': ['RELIANCE.NS', 'ONGC.NS', 'BPCL.NS', 'IOC.NS'],
+    'METALS': ['TATASTEEL.NS', 'HINDALCO.NS', 'JSWSTEEL.NS'],
+    'CEMENT': ['ULTRACEMCO.NS', 'AMBUJACEM.NS', 'ACC.NS']
+}
+
+print("✅ Super Math Trading System - Configuration Loaded")
+print(f"📊 Scanning: Top 50 VERIFIED WORKING stocks")
+print(f"🎯 Min Signal Score: {MIN_SIGNAL_SCORE}/10")
+print(f"💰 Initial Capital: ₹{INITIAL_CAPITAL:,.0f}")
+print(f"📱 Discord Alerts: {'Enabled' if DISCORD_ENABLED else 'Disabled'}")
+print(f"🤖 ML Predictions: {'Enabled' if LSTM_ENABLED else 'Disabled'}")
+print(f"📄 Paper Trading: {'Enabled' if PAPER_TRADING_ENABLED else 'Disabled'}")

@@ -1,22 +1,30 @@
-pandas
+# 🚀 SUPER MATH TRADING SYSTEM - Requirements
+# Compatible with Python 3.8 - 3.12
+
+# Core Data & Math
 numpy
-python-dotenv
+pandas
+scipy
+
+# Market Data
 yfinance
-beautifulsoup4
-requests
-lxml
-sqlalchemy
 pandas-ta
+
+# Machine Learning (TensorFlow is heavy - optional for now)
+scikit-learn
+
+# Discord Alerts
+requests
 discord-webhook
-schedule
+
+# Dashboard
 streamlit
 plotly
-setuptools
-wheel
+
+# Utilities
+python-dotenv
 pytz
-scikit-learn>=1.0.0
-scipy>=1.7.0
-tensorflow>=2.10.0
-keras>=2.10.0
-flask>=2.3.0
-flask-cors>=4.0.0
+colorama
+
+# Database
+sqlalchemy
