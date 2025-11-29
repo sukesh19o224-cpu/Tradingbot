@@ -38,8 +38,8 @@ MAX_SECTOR_EXPOSURE = 0.40  # 40% max per sector
 # Market Circuit Breaker (Exit all positions if market crashes)
 MARKET_CRASH_THRESHOLD = -0.035  # -3.5% - Exit all if NIFTY down >3.5% (more realistic)
 NIFTY_SYMBOL = "^NSEI"  # NIFTY 50 index symbol
-TRAILING_STOP_ACTIVATION = 0.05  # Activate trailing stop at +5%
-TRAILING_STOP_DISTANCE = 0.03  # Trail by 3%
+TRAILING_STOP_ACTIVATION = 0.03  # Activate trailing stop at +3% (STRICT - earlier activation)
+TRAILING_STOP_DISTANCE = 0.02  # Trail by 2% (STRICT - tighter trailing)
 
 # Stop Loss & Targets (REALISTIC & ACHIEVABLE)
 SWING_STOP_LOSS = 0.035  # 3.5% stop loss for swing (IMPROVED - wider to avoid premature exits)
@@ -47,7 +47,7 @@ POSITIONAL_STOP_LOSS = 0.04  # 4% stop loss for positional
 
 # Realistic targets based on actual market conditions
 SWING_TARGETS = [0.025, 0.05, 0.075]  # 2.5%, 5%, 7.5% targets (IMPROVED - more room to develop)
-POSITIONAL_TARGETS = [0.08, 0.15, 0.25]  # 8%, 15%, 25% targets (achievable in 3-6 weeks)
+POSITIONAL_TARGETS = [0.05, 0.10, 0.15]  # 5%, 10%, 15% targets (INTERMEDIATE - achievable in 1-2 weeks)
 
 # ═══════════════════════════════════════════════════════════════
 # 📊 TECHNICAL INDICATORS SETTINGS
@@ -156,14 +156,14 @@ SIGNAL_PRICE_MOVE_THRESHOLD = 0.01  # Reject if price moved >1% since signal
 # 📈 STRATEGY SETTINGS
 # ═══════════════════════════════════════════════════════════════
 
-# Swing Trading (3-7 days) - REALISTIC short-term trades
+# Swing Trading (3-7 days) - DISABLED (Positional performs better)
 SWING_HOLD_DAYS_MIN = 3
 SWING_HOLD_DAYS_MAX = 10  # Exit after 10 days max (IMPROVED - more time to develop)
-SWING_ENABLED = True
+SWING_ENABLED = False  # DISABLED - Focus on quality positional trades only
 
-# Positional Trading (2-6 weeks) - REALISTIC medium-term trades
-POSITIONAL_HOLD_DAYS_MIN = 10
-POSITIONAL_HOLD_DAYS_MAX = 30  # Exit after 30 days max (prevent dead money)
+# Positional Trading (INTERMEDIATE) - High quality setups, faster exits
+POSITIONAL_HOLD_DAYS_MIN = 5  # Minimum 5 days (was 10)
+POSITIONAL_HOLD_DAYS_MAX = 14  # Maximum 14 days (was 30) - INTERMEDIATE timeframe
 POSITIONAL_ENABLED = True
 
 # ═══════════════════════════════════════════════════════════════
