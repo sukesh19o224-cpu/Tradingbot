@@ -31,7 +31,7 @@ DRAWDOWN_THRESHOLD_MINOR = 0.05  # At 5% drawdown, reduce to 75% size
 DRAWDOWN_THRESHOLD_MAJOR = 0.10  # At 10% drawdown, reduce to 50% size
 
 # Position Limits
-MAX_POSITIONS = 5  # Maximum concurrent positions (BALANCED - reduced for larger position sizes)
+MAX_POSITIONS = 7  # Maximum concurrent positions per portfolio (7 × ₹10k = ₹70k positional, 3 × ₹10k = ₹30k swing)
 MAX_POSITION_SIZE = 0.25  # 25% max per position
 MAX_SECTOR_EXPOSURE = 0.40  # 40% max per sector
 
