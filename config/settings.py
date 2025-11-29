@@ -308,10 +308,9 @@ SECTORS = {
     'CEMENT': ['ULTRACEMCO.NS', 'AMBUJACEM.NS', 'ACC.NS']
 }
 
-print("✅ Super Math Trading System - Configuration Loaded")
-print(f"📊 Scanning: Top 50 VERIFIED WORKING stocks")
-print(f"🎯 Min Signal Score: {MIN_SIGNAL_SCORE}/10")
-print(f"💰 Initial Capital: ₹{INITIAL_CAPITAL:,.0f}")
-print(f"📱 Discord Alerts: {'Enabled' if DISCORD_ENABLED else 'Disabled'}")
-print(f"🤖 ML Predictions: {'Enabled' if LSTM_ENABLED else 'Disabled'}")
-print(f"📄 Paper Trading: {'Enabled' if PAPER_TRADING_ENABLED else 'Disabled'}")
+print("✅ INTERMEDIATE Positional Trading System - Configuration Loaded")
+print(f"📊 Strategy: 70% Positional (5-14 days) + 30% Swing STRICT (score ≥8.0, ADX ≥30)")
+print(f"🎯 Signal Scores: Positional ≥{MIN_SIGNAL_SCORE}/10, Swing ≥{MIN_SWING_SIGNAL_SCORE}/10")
+print(f"💰 Capital Split: ₹{INITIAL_CAPITAL * 0.70:,.0f} Positional + ₹{INITIAL_CAPITAL * 0.30:,.0f} Swing")
+print(f"📈 Max Positions: {MAX_POSITIONS} per portfolio (₹10k each)")
+print(f"📱 Discord: {'✅' if DISCORD_ENABLED else '❌'} • ML: {'✅' if LSTM_ENABLED else '❌'} • Paper Trading: {'✅' if PAPER_TRADING_ENABLED else '❌'}")

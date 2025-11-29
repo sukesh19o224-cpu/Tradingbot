@@ -44,10 +44,10 @@ class DualPortfolio:
 
         self.total_initial_capital = total_capital
 
-        print(f"💼 Dual Portfolio Initialized:")
-        print(f"   🔥 Swing Portfolio: ₹{swing_capital:,.0f}")
-        print(f"   📈 Positional Portfolio: ₹{positional_capital:,.0f}")
-        print(f"   💰 Total Capital: ₹{total_capital:,.0f}")
+        print(f"💼 INTERMEDIATE Positional Strategy - Dual Portfolio Initialized:")
+        print(f"   📈 Positional Portfolio (MAIN): ₹{positional_capital:,.0f} (70%) - 5-14 days, targets 5/10/15%")
+        print(f"   🔥 Swing Portfolio (STRICT): ₹{swing_capital:,.0f} (30%) - Score ≥8.0, ADX ≥30")
+        print(f"   💰 Total Capital: ₹{total_capital:,.0f} • Max 7 positions per portfolio (₹10k each)")
 
     def execute_swing_signal(self, signal: Dict) -> bool:
         """
@@ -229,7 +229,7 @@ class DualPortfolio:
         summary = self.get_combined_summary()
 
         print("\n" + "="*70)
-        print("💼 DUAL PORTFOLIO SUMMARY")
+        print("💼 INTERMEDIATE POSITIONAL STRATEGY - PORTFOLIO SUMMARY")
         print("="*70)
 
         print(f"\n📊 COMBINED PERFORMANCE:")
@@ -238,21 +238,21 @@ class DualPortfolio:
         print(f"   Total Trades: {summary['total_trades']}")
         print(f"   Win Rate: {summary['win_rate']:.1f}%")
 
-        print(f"\n🔥 SWING PORTFOLIO:")
-        print(f"   Value: ₹{summary['swing']['portfolio_value']:,.0f}")
-        print(f"   Return: ₹{summary['swing']['return']:+,.0f} ({summary['swing']['return_pct']:+.2f}%)")
-        print(f"   Cash: ₹{summary['swing']['capital']:,.0f}")
-        print(f"   Positions: {summary['swing']['positions']}")
-        print(f"   Trades: {summary['swing']['trades']} (Win Rate: {summary['swing']['win_rate']:.1f}%)")
-        print(f"   Avg Holding: {summary['swing']['avg_holding_days']:.1f} days")
-
-        print(f"\n📈 POSITIONAL PORTFOLIO:")
+        print(f"\n📈 POSITIONAL PORTFOLIO (MAIN - 70% Capital):")
         print(f"   Value: ₹{summary['positional']['portfolio_value']:,.0f}")
         print(f"   Return: ₹{summary['positional']['return']:+,.0f} ({summary['positional']['return_pct']:+.2f}%)")
         print(f"   Cash: ₹{summary['positional']['capital']:,.0f}")
-        print(f"   Positions: {summary['positional']['positions']}")
+        print(f"   Positions: {summary['positional']['positions']}/7 • Holding: {summary['positional']['avg_holding_days']:.1f} days (Target: 5-14)")
         print(f"   Trades: {summary['positional']['trades']} (Win Rate: {summary['positional']['win_rate']:.1f}%)")
-        print(f"   Avg Holding: {summary['positional']['avg_holding_days']:.1f} days")
+        print(f"   Strategy: Score ≥7.0 • Targets: 5%, 10%, 15%")
+
+        print(f"\n🔥 SWING PORTFOLIO (STRICT - 30% Capital):")
+        print(f"   Value: ₹{summary['swing']['portfolio_value']:,.0f}")
+        print(f"   Return: ₹{summary['swing']['return']:+,.0f} ({summary['swing']['return_pct']:+.2f}%)")
+        print(f"   Cash: ₹{summary['swing']['capital']:,.0f}")
+        print(f"   Positions: {summary['swing']['positions']}/7 • Holding: {summary['swing']['avg_holding_days']:.1f} days (Max: 10)")
+        print(f"   Trades: {summary['swing']['trades']} (Win Rate: {summary['swing']['win_rate']:.1f}%)")
+        print(f"   Strategy: Score ≥8.0 • ADX ≥30 • Targets: 2.5%, 5%, 7.5%")
 
     def _get_current_price(self, symbol: str) -> float:
         """
