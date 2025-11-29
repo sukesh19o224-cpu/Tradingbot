@@ -74,8 +74,8 @@ BB_STD = 2
 
 # ADX Settings - Trend strength thresholds
 ADX_PERIOD = 14
-ADX_MIN_TREND = 18       # Minimum for swing trades (some trend)
-ADX_STRONG_TREND = 25    # Strong trend (good for all trades)
+ADX_MIN_TREND = 30       # Minimum for swing trades (STRICT - strong trend required)
+ADX_STRONG_TREND = 25    # Strong trend (good for positional)
 ADX_VERY_STRONG = 50     # Very strong trend (rare)
 
 # Volume Settings
@@ -118,14 +118,15 @@ ML_FEATURES = [
 # 🎯 SIGNAL GENERATION
 # ═══════════════════════════════════════════════════════════════
 
-# Scoring System (0-10) - BALANCED for 60-70% win rate, ~5-10 signals per 100 stocks
-MIN_SIGNAL_SCORE = 7.0  # Minimum score (tightened for better quality)
+# Scoring System (0-10) - STRICT for swing, BALANCED for positional
+MIN_SIGNAL_SCORE = 7.0  # Minimum score for positional (BALANCED - good quality)
+MIN_SWING_SIGNAL_SCORE = 8.0  # Minimum score for swing (STRICT - only best setups)
 HIGH_QUALITY_SCORE = 8.5  # High quality signal threshold (for auto-replacement)
 
 # Signal Filtering (Prevent signal flood)
-# BALANCED: Quality over quantity
-MAX_SWING_SIGNALS_PER_SCAN = 6  # Max swing signals to process per scan
-MAX_POSITIONAL_SIGNALS_PER_SCAN = 4  # Max positional signals to process per scan
+# STRICT swing limits (30% capital), BALANCED positional limits (70% capital)
+MAX_SWING_SIGNALS_PER_SCAN = 2  # Max swing signals (STRICT - only top 2)
+MAX_POSITIONAL_SIGNALS_PER_SCAN = 5  # Max positional signals (BALANCED - main strategy)
 
 # Dynamic Capital Allocation (By Signal Type)
 # DISABLED: Focus on signal quality, not signal type
@@ -156,10 +157,10 @@ SIGNAL_PRICE_MOVE_THRESHOLD = 0.01  # Reject if price moved >1% since signal
 # 📈 STRATEGY SETTINGS
 # ═══════════════════════════════════════════════════════════════
 
-# Swing Trading (3-7 days) - DISABLED (Positional performs better)
+# Swing Trading (3-7 days) - STRICT quality only (30% capital)
 SWING_HOLD_DAYS_MIN = 3
 SWING_HOLD_DAYS_MAX = 10  # Exit after 10 days max (IMPROVED - more time to develop)
-SWING_ENABLED = False  # DISABLED - Focus on quality positional trades only
+SWING_ENABLED = True  # ENABLED - STRICT criteria, only top-tier swing setups (score >= 8.0, ADX >= 30)
 
 # Positional Trading (INTERMEDIATE) - High quality setups, faster exits
 POSITIONAL_HOLD_DAYS_MIN = 5  # Minimum 5 days (was 10)

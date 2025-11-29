@@ -14,8 +14,8 @@ import yfinance as yf
 class DualPortfolio:
     """
     Manages two separate portfolios:
-    - Swing Trading Portfolio (60% capital)
-    - Positional Trading Portfolio (40% capital)
+    - Swing Trading Portfolio (30% capital) - STRICT quality only
+    - Positional Trading Portfolio (70% capital) - Main strategy
     """
 
     def __init__(self, total_capital: float = 100000):
@@ -25,9 +25,9 @@ class DualPortfolio:
         Args:
             total_capital: Total capital to split between portfolios
         """
-        # Split capital: 60% swing, 40% positional
-        swing_capital = total_capital * 0.60
-        positional_capital = total_capital * 0.40
+        # Split capital: 30% swing (STRICT quality only), 70% positional (main strategy)
+        swing_capital = total_capital * 0.30
+        positional_capital = total_capital * 0.70
 
         # Create two separate portfolios
         self.swing_portfolio = PaperTrader(
@@ -168,10 +168,10 @@ class DualPortfolio:
             'total_trades': total_trades,
             'win_rate': win_rate,
 
-            # Swing portfolio
+            # Swing portfolio (30% capital - STRICT quality only)
             'swing': {
                 'portfolio_value': swing_summary['portfolio_value'],
-                'return': swing_summary['portfolio_value'] - (self.total_initial_capital * 0.60),
+                'return': swing_summary['portfolio_value'] - (self.total_initial_capital * 0.30),
                 'return_pct': swing_summary['total_return_percent'],
                 'capital': swing_summary['capital'],
                 'positions': swing_summary['open_positions'],
@@ -180,10 +180,10 @@ class DualPortfolio:
                 'avg_holding_days': swing_summary.get('avg_holding_days', 0),
             },
 
-            # Positional portfolio
+            # Positional portfolio (70% capital - Main strategy)
             'positional': {
                 'portfolio_value': positional_summary['portfolio_value'],
-                'return': positional_summary['portfolio_value'] - (self.total_initial_capital * 0.40),
+                'return': positional_summary['portfolio_value'] - (self.total_initial_capital * 0.70),
                 'return_pct': positional_summary['total_return_percent'],
                 'capital': positional_summary['capital'],
                 'positions': positional_summary['open_positions'],

@@ -143,10 +143,13 @@ class SignalGenerator:
             }
 
             # Only return signal if score meets minimum threshold
-            if signal_score >= MIN_SIGNAL_SCORE:
+            # STRICT: Swing requires higher score (8.0), Positional requires 7.0
+            min_required_score = MIN_SWING_SIGNAL_SCORE if trade_type == 'SWING' else MIN_SIGNAL_SCORE
+
+            if signal_score >= min_required_score:
                 return signal
             else:
-                return None  # Score too low
+                return None  # Score too low for this trade type
 
         except Exception as e:
             print(f"❌ Signal generation error for {symbol}: {e}")
