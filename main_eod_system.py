@@ -19,6 +19,7 @@ from config.settings import *
 from src.data.sequential_scanner import SequentialScanner
 from src.paper_trading.dual_portfolio import DualPortfolio
 from src.alerts.discord_alerts import DiscordAlerts
+from src.utils.signal_validator import SignalValidator
 
 IST = pytz.timezone('Asia/Kolkata')
 
@@ -46,6 +47,9 @@ class EODIntradaySystem:
 
         # Discord alerts
         self.discord = DiscordAlerts()
+
+        # Signal validator
+        self.signal_validator = SignalValidator()
 
         # Stock list (will be loaded from config)
         self.stocks = self._load_stock_list()
@@ -180,6 +184,15 @@ class EODIntradaySystem:
         for signal in swing_signals:
             symbol = signal['symbol']
 
+            # Validate signal freshness
+            is_valid, reason = self.signal_validator.validate_signal_freshness(
+                signal, signal.get('current_price', signal.get('entry_price', 0))
+            )
+
+            if not is_valid:
+                print(f"   ⏭️ {symbol}: Skipped ({reason})")
+                continue
+
             if PAPER_TRADING_AUTO_EXECUTE:
                 executed = self.dual_portfolio.execute_swing_signal(signal)
 
@@ -194,6 +207,15 @@ class EODIntradaySystem:
         # Process positional signals
         for signal in positional_signals:
             symbol = signal['symbol']
+
+            # Validate signal freshness
+            is_valid, reason = self.signal_validator.validate_signal_freshness(
+                signal, signal.get('current_price', signal.get('entry_price', 0))
+            )
+
+            if not is_valid:
+                print(f"   ⏭️ {symbol}: Skipped ({reason})")
+                continue
 
             if PAPER_TRADING_AUTO_EXECUTE:
                 executed = self.dual_portfolio.execute_positional_signal(signal)

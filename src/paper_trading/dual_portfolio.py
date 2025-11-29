@@ -8,6 +8,7 @@ import os
 from datetime import datetime
 from typing import Dict, List
 from src.paper_trading.paper_trader import PaperTrader
+import yfinance as yf
 
 
 class DualPortfolio:
@@ -126,11 +127,29 @@ class DualPortfolio:
         """
         Get combined summary of both portfolios
 
+        Fetches current market prices for accurate portfolio valuation
+
         Returns:
             Combined portfolio summary
         """
-        swing_summary = self.swing_portfolio.get_summary()
-        positional_summary = self.positional_portfolio.get_summary()
+        # Fetch current prices for all open positions
+        current_prices = {}
+
+        # Get prices for swing positions
+        for symbol in self.swing_portfolio.positions.keys():
+            price = self._get_current_price(symbol)
+            if price > 0:
+                current_prices[symbol] = price
+
+        # Get prices for positional positions
+        for symbol in self.positional_portfolio.positions.keys():
+            price = self._get_current_price(symbol)
+            if price > 0:
+                current_prices[symbol] = price
+
+        # Get summaries with current market prices
+        swing_summary = self.swing_portfolio.get_summary(current_prices)
+        positional_summary = self.positional_portfolio.get_summary(current_prices)
 
         # Calculate combined metrics
         total_portfolio_value = swing_summary['portfolio_value'] + positional_summary['portfolio_value']
@@ -235,4 +254,25 @@ class DualPortfolio:
         print(f"   Trades: {summary['positional']['trades']} (Win Rate: {summary['positional']['win_rate']:.1f}%)")
         print(f"   Avg Holding: {summary['positional']['avg_holding_days']:.1f} days")
 
-        print("="*70)
+    def _get_current_price(self, symbol: str) -> float:
+        """
+        Fetch current market price for a symbol
+
+        Args:
+            symbol: Stock symbol (e.g., 'RELIANCE.NS')
+
+        Returns:
+            Current price or 0 if failed
+        """
+        try:
+            ticker = yf.Ticker(symbol)
+            data = ticker.history(period='1d', interval='1d')
+
+            if not data.empty:
+                return float(data['Close'].iloc[-1])
+
+            return 0
+
+        except Exception:
+            # Silent fail - will use entry price as fallback
+            return 0

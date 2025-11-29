@@ -10,6 +10,8 @@ from typing import Dict, List, Optional
 import pandas as pd
 
 from config.settings import *
+from src.utils.trading_calendar import calculate_trading_days
+from src.utils.position_sizer import PositionSizer
 
 
 class PaperTrader:
@@ -37,6 +39,9 @@ class PaperTrader:
         self.trades_file = data_file if data_file else 'data/trades.json'
         self.portfolio_file = portfolio_file if portfolio_file else PAPER_TRADING_FILE
         self.initial_capital = capital if capital else PAPER_TRADING_CAPITAL
+
+        # Initialize position sizer for volatility-based sizing
+        self.position_sizer = PositionSizer()
 
         # Load or initialize portfolio
         if os.path.exists(self.portfolio_file):
@@ -190,10 +195,20 @@ class PaperTrader:
             # Deduct capital
             self.capital -= cost
 
+            # Determine default max holding days based on strategy
+            strategy = signal.get('strategy', 'unknown')
+            if strategy == 'swing':
+                default_max_days = 7  # Swing trades: 7 trading days (~1-2 weeks)
+            elif strategy == 'positional':
+                default_max_days = 30  # Positional trades: 30 trading days (~6 weeks)
+            else:
+                default_max_days = 15  # Unknown strategy: conservative default
+
             # Add position
             self.positions[symbol] = {
                 'symbol': symbol,
                 'shares': shares,
+                'initial_shares': shares,  # Track initial shares for partial exit tracking
                 'entry_price': entry_price,
                 'entry_date': datetime.now().isoformat(),
                 'trade_type': signal['trade_type'],
@@ -203,9 +218,13 @@ class PaperTrader:
                 'stop_loss': signal['stop_loss'],
                 'score': signal['score'],
                 'cost': cost,
-                'max_holding_days': signal.get('max_holding_days', 30),  # Default 30 days
+                'max_holding_days': signal.get('max_holding_days', default_max_days),
                 'strategy': signal.get('strategy', 'unknown'),
-                'signal_type': signal.get('signal_type', 'MOMENTUM')  # MEAN_REVERSION, MOMENTUM, or BREAKOUT
+                'signal_type': signal.get('signal_type', 'MOMENTUM'),  # MEAN_REVERSION, MOMENTUM, or BREAKOUT
+                # FIX: Track which targets have been hit to prevent duplicate exits
+                't1_hit': False,
+                't2_hit': False,
+                't3_hit': False
             }
 
             self._save_portfolio()
@@ -260,30 +279,46 @@ class PaperTrader:
 
             # CRITICAL FIX #3: Check TARGETS FIRST (not time!)
             # Priority 1: Target 3 (highest profit)
-            if current_price >= position['target3']:
+            if current_price >= position['target3'] and not position.get('t3_hit', False):
                 exit_info = self._exit_position(
                     symbol, current_price, 'TARGET_3', full_exit=True
                 )
                 if exit_info:
                     exits.append(exit_info)
+                    # Mark T3 as hit (position deleted on full exit, but good practice)
+                    if symbol in self.positions:
+                        self.positions[symbol]['t3_hit'] = True
                 continue  # Move to next position
 
             # Priority 2: Target 2 (good profit)
-            elif current_price >= position['target2']:
+            elif current_price >= position['target2'] and not position.get('t2_hit', False):
                 exit_info = self._exit_position(
-                    symbol, current_price, 'TARGET_2', partial=0.40
+                    symbol, current_price, 'TARGET_2', partial=0.35  # BALANCED: 35% at T2 (hold 65% for T3)
                 )
                 if exit_info:
                     exits.append(exit_info)
+                    # IMPROVED: Move stop to HALFWAY between entry and T1 (GUARANTEES profit!)
+                    if symbol in self.positions and exit_info['exit_type'] == 'PARTIAL':
+                        halfway_stop = (entry_price + position['target1']) / 2
+                        self.positions[symbol]['stop_loss'] = halfway_stop
+                        self.positions[symbol]['t2_hit'] = True  # Mark T2 as hit
+                        self._save_portfolio()  # Save updated stop
+                        print(f"   🔒 Stop moved to ₹{halfway_stop:.2f} (halfway to T1 - PROFIT LOCKED!)")
                 # Don't continue, check other exits too
 
             # Priority 3: Target 1 (minimum profit)
-            elif current_price >= position['target1']:
+            elif current_price >= position['target1'] and not position.get('t1_hit', False):
                 exit_info = self._exit_position(
-                    symbol, current_price, 'TARGET_1', partial=0.40
+                    symbol, current_price, 'TARGET_1', partial=0.25  # BALANCED: 25% at T1 (hold 75% for T2/T3)
                 )
                 if exit_info:
                     exits.append(exit_info)
+                    # CRITICAL: Move stop to breakeven after T1 to protect profit
+                    if symbol in self.positions and exit_info['exit_type'] == 'PARTIAL':
+                        self.positions[symbol]['stop_loss'] = entry_price
+                        self.positions[symbol]['t1_hit'] = True  # Mark T1 as hit
+                        self._save_portfolio()  # Save updated stop
+                        print(f"   🔒 Stop moved to breakeven (₹{entry_price:.2f}) after T1")
                 # Don't continue, check other exits too
 
             # Priority 4: STOP LOSS (including trailing stop)
@@ -300,15 +335,16 @@ class PaperTrader:
             if 'entry_date' in position and 'max_holding_days' in position:
                 try:
                     entry_date = datetime.fromisoformat(position['entry_date'])
-                    days_held = (datetime.now() - entry_date).days
+                    # CRITICAL FIX: Use TRADING DAYS instead of calendar days
+                    trading_days_held = calculate_trading_days(entry_date, datetime.now())
                     max_days = position['max_holding_days']
 
                     # Only exit on time if:
-                    # 1. Max days reached AND
+                    # 1. Max trading days reached AND
                     # 2. Not in profit (or profit < 3%)
-                    if days_held >= max_days and profit_pct < 0.03:
+                    if trading_days_held >= max_days and profit_pct < 0.03:
                         exit_info = self._exit_position(
-                            symbol, current_price, f'MAX_HOLDING_PERIOD ({days_held} days)', full_exit=True
+                            symbol, current_price, f'MAX_HOLDING_PERIOD ({trading_days_held} trading days)', full_exit=True
                         )
                         if exit_info:
                             exits.append(exit_info)
@@ -332,7 +368,9 @@ class PaperTrader:
                 # Partial exit
                 shares_to_sell = int(position['shares'] * partial)
                 if shares_to_sell <= 0:
-                    # CRITICAL FIX #8: If partial exit too small, exit full position
+                    # BETTER FIX: For small positions, exit FULL position to lock in profit
+                    # Rationale: T2/T3 are rare, better to secure T1 profit than risk losing it
+                    print(f"   💡 Position too small for partial exit ({position['shares']} shares), exiting full position to lock profit")
                     shares_to_sell = position['shares']
                     full_exit = True
             else:
@@ -397,10 +435,15 @@ class PaperTrader:
                 'symbol': symbol,
                 'exit_type': exit_type,
                 'exit_price': exit_price,
+                'entry_price': entry_price,  # Add entry price for Discord
                 'pnl': pnl,
                 'pnl_percent': pnl_percent,
                 'reason': reason,
-                'shares': shares_to_sell
+                'shares': shares_to_sell,
+                'trade_type': position['trade_type'],  # Add trade type (SWING/POSITIONAL)
+                'target1': position.get('target1', 0),  # Add targets for reference
+                'target2': position.get('target2', 0),
+                'target3': position.get('target3', 0)
             }
 
         except Exception as e:
@@ -409,49 +452,36 @@ class PaperTrader:
 
     def _calculate_position_size(self, signal: Dict) -> float:
         """
-        Calculate position size using risk management + quality-based sizing
+        Calculate position size using ADVANCED risk management
 
         Uses:
         - Portfolio value (not just cash) for fair sizing
-        - Kelly Criterion (fractional)
-        - Max risk per trade limit
+        - ATR-based volatility sizing (normalize risk across stocks)
+        - Drawdown-based risk reduction (reduce size during drawdowns)
         - Quality multiplier based on signal score
         """
         try:
-            # CRITICAL FIX #6: Use portfolio value, not just remaining cash
-            # This ensures all positions get fair sizing
+            # Calculate portfolio value and current drawdown
             portfolio_value = self.capital + sum(p['shares'] * p['entry_price'] for p in self.positions.values())
+            current_drawdown = max(0, (self.initial_capital - portfolio_value) / self.initial_capital)
 
-            # Base position size
-            max_position = portfolio_value * MAX_POSITION_SIZE
+            # Get historical data for ATR calculation (if available in signal)
+            df = None
+            if '_technical_details' in signal and 'df' in signal['_technical_details']:
+                df = signal['_technical_details']['df']
 
-            # Risk-based sizing
-            entry = signal['entry_price']
-            stop = signal['stop_loss']
-            risk_per_share = entry - stop
-
-            # Max shares based on risk limit
-            max_risk_amount = portfolio_value * MAX_RISK_PER_TRADE
-            max_shares_by_risk = max_risk_amount / risk_per_share if risk_per_share > 0 else 0
-
-            # Base position size
-            base_position_size = min(max_position, max_shares_by_risk * entry)
-
-            # NEW FEATURE: Quality-based position sizing
-            # Score 9-10: 1.5x size (high confidence)
-            # Score 8-9: 1.0x size (normal)
-            # Score 7-8: 0.5x size (low confidence)
-            # Score <7: 0x (skip)
-            score = signal.get('score', 7.0)
-            if score < 7.0:
-                return 0  # Skip low quality signals
-
-            # Linear multiplier: 0.5x at score 7, 1.0x at score 8, 1.5x at score 9, 2.0x at score 10
-            quality_multiplier = 0.5 + (score - 7) * 0.5
-            quality_multiplier = min(quality_multiplier, 2.0)  # Cap at 2x
-
-            # Adjusted position size
-            position_size = base_position_size * quality_multiplier
+            # Use advanced position sizer if we have historical data
+            if df is not None and not df.empty:
+                position_size = self.position_sizer.calculate_complete_position_size(
+                    portfolio_value=portfolio_value,
+                    available_capital=self.capital,
+                    signal=signal,
+                    df=df,
+                    current_drawdown=current_drawdown
+                )
+            else:
+                # Fallback to simple sizing if no data available
+                position_size = self._simple_position_sizing(signal, portfolio_value, current_drawdown)
 
             # Don't exceed available capital
             position_size = min(position_size, self.capital)
@@ -460,6 +490,45 @@ class PaperTrader:
 
         except Exception as e:
             print(f"❌ Position sizing error: {e}")
+            # Fallback to simple sizing
+            return self._simple_position_sizing(signal, portfolio_value, 0)
+
+    def _simple_position_sizing(self, signal: Dict, portfolio_value: float, drawdown: float) -> float:
+        """Simple fallback position sizing without ATR"""
+        try:
+            entry = signal['entry_price']
+            stop = signal['stop_loss']
+            risk_per_share = entry - stop
+
+            if risk_per_share <= 0:
+                return 0
+
+            # Base risk
+            base_risk = MAX_RISK_PER_TRADE
+
+            # Adjust for drawdown
+            if DRAWDOWN_RISK_REDUCTION_ENABLED:
+                if drawdown >= DRAWDOWN_THRESHOLD_MAJOR:
+                    base_risk *= 0.5
+                elif drawdown >= DRAWDOWN_THRESHOLD_MINOR:
+                    base_risk *= 0.75
+
+            # Calculate position size
+            max_risk_amount = portfolio_value * base_risk
+            max_shares = max_risk_amount / risk_per_share
+            base_position_size = min(max_shares * entry, portfolio_value * MAX_POSITION_SIZE)
+
+            # Quality adjustment
+            score = signal.get('score', 7.0)
+            if score < 7.0:
+                return 0
+
+            quality_multiplier = 0.5 + (score - 7) * 0.5
+            quality_multiplier = min(quality_multiplier, 2.0)
+
+            return base_position_size * quality_multiplier
+
+        except:
             return 0
 
     def _try_smart_replacement(self, new_signal: Dict) -> bool:
@@ -544,6 +613,26 @@ class PaperTrader:
                 return True
 
         return False
+
+    def get_position_trading_days(self, symbol: str) -> int:
+        """
+        Get trading days held for a position
+
+        Args:
+            symbol: Stock symbol
+
+        Returns:
+            Number of trading days held (0 if position not found)
+        """
+        if symbol not in self.positions:
+            return 0
+
+        try:
+            entry_date = datetime.fromisoformat(self.positions[symbol]['entry_date'])
+            return calculate_trading_days(entry_date, datetime.now())
+        except Exception as e:
+            print(f"⚠️ Error calculating trading days for {symbol}: {e}")
+            return 0
 
     def get_portfolio_value(self, current_prices: Dict[str, float]) -> float:
         """Calculate total portfolio value"""

@@ -22,6 +22,7 @@ from src.strategies.signal_generator import SignalGenerator
 from src.strategies.multitimeframe_analyzer import MultiTimeframeAnalyzer
 from src.paper_trading.dual_portfolio import DualPortfolio
 from src.alerts.discord_alerts import DiscordAlerts
+from src.utils.signal_validator import SignalValidator
 
 IST = pytz.timezone('Asia/Kolkata')
 
@@ -48,6 +49,9 @@ class TradingSystem:
         self.dual_portfolio = DualPortfolio(total_capital=INITIAL_CAPITAL)
 
         self.discord = DiscordAlerts()
+
+        # Signal validator for quality control
+        self.signal_validator = SignalValidator()
 
         # Multi-timeframe analyzer and NSE stock fetcher
         self.mtf_analyzer = MultiTimeframeAnalyzer()
@@ -135,6 +139,15 @@ class TradingSystem:
         for signal in swing_signals:
             symbol = signal['symbol']
 
+            # Validate signal freshness and quality
+            is_valid, reason = self.signal_validator.validate_signal_freshness(
+                signal, signal.get('current_price', signal.get('entry_price', 0))
+            )
+
+            if not is_valid:
+                print(f"   ⏭️ Swing: {symbol} skipped ({reason})")
+                continue
+
             if PAPER_TRADING_AUTO_EXECUTE:
                 executed = self.dual_portfolio.execute_swing_signal(signal)
 
@@ -149,6 +162,15 @@ class TradingSystem:
         # Process positional signals → Positional portfolio
         for signal in positional_signals:
             symbol = signal['symbol']
+
+            # Validate signal freshness and quality
+            is_valid, reason = self.signal_validator.validate_signal_freshness(
+                signal, signal.get('current_price', signal.get('entry_price', 0))
+            )
+
+            if not is_valid:
+                print(f"   ⏭️ Positional: {symbol} skipped ({reason})")
+                continue
 
             if PAPER_TRADING_AUTO_EXECUTE:
                 executed = self.dual_portfolio.execute_positional_signal(signal)

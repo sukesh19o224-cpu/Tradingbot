@@ -137,7 +137,12 @@ class MultiTimeframeAnalyzer:
 
         # If math_indicators is None, use empty dict
         if math_indicators is None:
-            math_indicators = {}
+            math_indicators = {
+                'fibonacci': {},
+                'elliott_wave': {'pattern': 'UNKNOWN', 'wave_count': 0},
+                'mathematical_score': 5.0,
+                'signals': {}
+            }
 
         # Determine trend
         current_price = float(df['Close'].iloc[-1])
@@ -160,6 +165,17 @@ class MultiTimeframeAnalyzer:
             trend = 'SIDEWAYS'
             trend_score = 5
 
+        # Extract REAL mathematical indicators
+        fibonacci = math_indicators.get('fibonacci', {})
+        elliott_wave = math_indicators.get('elliott_wave', {})
+        math_signals = math_indicators.get('signals', {})
+        math_score = math_indicators.get('mathematical_score', 5.0)
+
+        # Extract support/resistance from math indicators
+        sr = math_indicators.get('support_resistance', {})
+        nearest_support = sr.get('nearest_support', current_price * 0.95)
+        nearest_resistance = sr.get('nearest_resistance', current_price * 1.05)
+
         return {
             'timeframe': 'DAILY',
             'current_price': current_price,
@@ -171,10 +187,18 @@ class MultiTimeframeAnalyzer:
             'macd_signal': indicators['macd_signal'],
             'macd_histogram': indicators['macd_histogram'],
             'ema_alignment': current_price > ema_50,
-            'support_level': math_indicators.get('support_level', current_price * 0.95),
-            'resistance_level': math_indicators.get('resistance_level', current_price * 1.05),
-            'fibonacci_levels': math_indicators.get('fibonacci_levels', {}),
+            'support_level': nearest_support,
+            'resistance_level': nearest_resistance,
+            'fibonacci_levels': fibonacci,
             'volume_trend': indicators['signals']['volume_signal'],
+
+            # REAL Mathematical indicators
+            'mathematical_score': math_score,
+            'fibonacci_signal': math_signals.get('fibonacci', 'NO_SIGNAL'),
+            'elliott_wave_pattern': elliott_wave.get('pattern', 'UNKNOWN'),
+            'elliott_wave_count': elliott_wave.get('wave_count', 0),
+            'elliott_signal': math_signals.get('elliott', 'NEUTRAL'),
+            'technical_signals': indicators['signals'],  # All technical signals
         }
 
     def _analyze_intraday(self, df: pd.DataFrame) -> Dict:
@@ -333,19 +357,31 @@ class MultiTimeframeAnalyzer:
                 'exit_urgency': 'DAILY_ONLY',
             })
 
-        # Calculate overall quality score
+        # Calculate COMPREHENSIVE quality score using ALL indicators
+        technical_score = daily.get('technical_signals', {}).get('technical_score', 5.0)
+        mathematical_score = daily.get('mathematical_score', 5.0)
+
         if intraday:
-            # Combined score: 60% daily trend + 40% intraday timing
+            # With intraday: Balanced scoring across all components
             combined['overall_quality'] = (
-                daily['trend_score'] * 0.6 +
-                intraday['entry_quality'] * 0.4
+                daily['trend_score'] * 0.35 +        # EMA trend (35%)
+                technical_score * 0.30 +             # RSI, MACD, ADX, Volume (30%)
+                mathematical_score * 0.25 +          # Fibonacci, Elliott, Gann, S/R (25%)
+                intraday['entry_quality'] * 0.10     # Intraday timing (10%)
             )
         else:
-            combined['overall_quality'] = daily['trend_score']
+            # Without intraday: Focus on daily analysis
+            combined['overall_quality'] = (
+                daily['trend_score'] * 0.40 +        # EMA trend (40%)
+                technical_score * 0.35 +             # Technical indicators (35%)
+                mathematical_score * 0.25            # Mathematical indicators (25%)
+            )
 
         # ADD MISSING FIELDS for sequential_scanner compatibility
         combined['uptrend'] = daily['trend'] in ['UPTREND', 'STRONG_UPTREND', 'WEAK_UPTREND']
-        combined['signal_score'] = combined['overall_quality']  # Use overall_quality as signal_score
+        combined['signal_score'] = combined['overall_quality']  # Comprehensive score
+        combined['technical_score'] = technical_score  # Add technical score
+        combined['trend_only_score'] = daily['trend_score']  # Keep trend-only for reference
         combined['current_price'] = daily['current_price']
         combined['trend_strength'] = daily['trend']
 
@@ -357,6 +393,18 @@ class MultiTimeframeAnalyzer:
             'macd_histogram': daily.get('macd_histogram', 0),
             'volume_ratio': 1.5 if daily.get('volume_trend') == 'STRONG' else 1.0
         }
+
+        # Add REAL mathematical indicators (NOT placeholders!)
+        combined['mathematical_score'] = daily.get('mathematical_score', 5.0)
+        combined['fibonacci_signal'] = daily.get('fibonacci_signal', 'NO_SIGNAL')
+        combined['elliott_wave_pattern'] = daily.get('elliott_wave_pattern', 'UNKNOWN')
+        combined['elliott_wave_count'] = daily.get('elliott_wave_count', 0)
+        combined['elliott_signal'] = daily.get('elliott_signal', 'NEUTRAL')
+
+        # Add REAL trend signals from technical analysis
+        tech_signals = daily.get('technical_signals', {})
+        combined['ema_trend'] = tech_signals.get('ema_trend', 'NEUTRAL')
+        combined['macd_signal'] = tech_signals.get('macd_signal', 'NEUTRAL')
 
         # Add signal type classification
         if intraday and intraday.get('recent_breakout'):

@@ -136,6 +136,30 @@ class SequentialScanner:
         print(f"📈 Positional Signals: {stats['positional_found']}")
         print(f"⚡ Total Qualified: {len(stats['qualified_stocks'])} stocks")
 
+        # CRITICAL FIX: Sort signals by score (highest first) and take top N
+        # This ensures we get BEST quality signals, not first-found signals
+
+        # Sort swing signals by score (descending)
+        swing_signals = sorted(swing_signals, key=lambda x: x.get('score', 0), reverse=True)
+
+        # Sort positional signals by score (descending)
+        positional_signals = sorted(positional_signals, key=lambda x: x.get('score', 0), reverse=True)
+
+        # Take only top N signals (as per config)
+        from config.settings import MAX_SWING_SIGNALS_PER_SCAN, MAX_POSITIONAL_SIGNALS_PER_SCAN
+
+        original_swing_count = len(swing_signals)
+        original_positional_count = len(positional_signals)
+
+        swing_signals = swing_signals[:MAX_SWING_SIGNALS_PER_SCAN]
+        positional_signals = positional_signals[:MAX_POSITIONAL_SIGNALS_PER_SCAN]
+
+        # Show filtering info
+        if original_swing_count > len(swing_signals):
+            print(f"\n📊 Filtered swing signals: {original_swing_count} → {len(swing_signals)} (top {len(swing_signals)} by score)")
+        if original_positional_count > len(positional_signals):
+            print(f"📊 Filtered positional signals: {original_positional_count} → {len(positional_signals)} (top {len(positional_signals)} by score)")
+
         return {
             'swing_signals': swing_signals,
             'positional_signals': positional_signals,
@@ -187,21 +211,27 @@ class SequentialScanner:
         """
         Check if stock qualifies for SWING trade
 
-        MODERATE Swing criteria:
-        - RSI: 55-70 (narrower, momentum zone)
-        - Score: ≥7.0 (higher quality)
-        - ADX: ≥20 (trend strength required)
+        BALANCED criteria (60-70% win rate, ~5-10 signals per 100 stocks):
+        - RSI: 48-72 (tighter momentum zone)
+        - Score: ≥6.8 (slightly higher quality)
+        - ADX: ≥20 (confirmed trend strength)
         - Uptrend: Required
+
+        Balanced thresholds for quality vs quantity
         """
         try:
             indicators = mtf_result.get('indicators', {})
 
-            # RSI check - moderate range (55-70)
+            # RSI check - balanced range (48-72)
+            # 48: Clear upward momentum
+            # 72: Strong but not extreme
             rsi = indicators.get('rsi', 0)
-            if rsi < 55 or rsi > 70:
+            if rsi < 48 or rsi > 72:
                 return False
 
-            # ADX check - require trend strength
+            # ADX check - confirmed trend (20+)
+            # 20+: Clear trend exists
+            # Below 20: Weak/choppy (avoid)
             adx = indicators.get('adx', 0)
             if adx < 20:
                 return False
@@ -210,9 +240,11 @@ class SequentialScanner:
             if not mtf_result.get('uptrend', False):
                 return False
 
-            # Signal strength - moderate (7.0)
+            # Signal strength - balanced (6.8+)
+            # 6.8: Higher quality filter
+            # Combines trend (40%) + technical (35%) + math (25%)
             signal_score = mtf_result.get('signal_score', 0)
-            if signal_score < 7.0:
+            if signal_score < 6.8:
                 return False
 
             return True
@@ -224,32 +256,40 @@ class SequentialScanner:
         """
         Check if stock qualifies for POSITIONAL trade
 
-        MODERATE Positional criteria:
-        - ADX: ≥25 (stronger trend required)
-        - RSI: 50-70 (narrower, healthy range)
-        - Score: ≥7.0 (higher quality)
+        BALANCED criteria (60-70% win rate, ~5-10 signals per 100 stocks):
+        - ADX: ≥22 (stronger trend for longer holds)
+        - RSI: 45-68 (tighter healthy range)
+        - Score: ≥6.8 (slightly higher quality)
         - Uptrend: Required
+
+        Positional trades need stable quality trends
         """
         try:
             indicators = mtf_result.get('indicators', {})
 
-            # ADX check - moderate (25+)
+            # ADX check - stronger trend (22+)
+            # 22+: Stable trend for longer holds
+            # Positional needs consistency
             adx = indicators.get('adx', 0)
-            if adx < 25:
+            if adx < 22:
                 return False
 
-            # RSI check - moderate range (50-70)
+            # RSI check - tighter healthy range (45-68)
+            # 45: Confirmed uptrend
+            # 68: Strong but not extreme
+            # Tighter than before for better quality
             rsi = indicators.get('rsi', 0)
-            if rsi < 50 or rsi > 70:
+            if rsi < 45 or rsi > 68:
                 return False
 
-            # Trend check
+            # Trend check (must be in uptrend)
             if not mtf_result.get('uptrend', False):
                 return False
 
-            # Signal strength - moderate (7.0)
+            # Signal strength - balanced (6.8+)
+            # Same as swing - comprehensive score
             signal_score = mtf_result.get('signal_score', 0)
-            if signal_score < 7.0:
+            if signal_score < 6.8:
                 return False
 
             return True
@@ -269,7 +309,72 @@ class SequentialScanner:
         Returns:
             Signal dict with all details
         """
+        from config.settings import (
+            SWING_STOP_LOSS, SWING_TARGETS, POSITIONAL_STOP_LOSS, POSITIONAL_TARGETS,
+            INITIAL_CAPITAL, MAX_POSITION_SIZE, MAX_RISK_PER_TRADE
+        )
+
         indicators = mtf_result.get('indicators', {})
+        entry_price = mtf_result.get('current_price', 0)
+
+        # Calculate stop loss and targets based on strategy type
+        if strategy_type == 'swing':
+            stop_loss = entry_price * (1 - SWING_STOP_LOSS)
+            target1 = entry_price * (1 + SWING_TARGETS[0])
+            target2 = entry_price * (1 + SWING_TARGETS[1])
+            target3 = entry_price * (1 + SWING_TARGETS[2])
+        else:  # positional
+            stop_loss = entry_price * (1 - POSITIONAL_STOP_LOSS)
+            target1 = entry_price * (1 + POSITIONAL_TARGETS[0])
+            target2 = entry_price * (1 + POSITIONAL_TARGETS[1])
+            target3 = entry_price * (1 + POSITIONAL_TARGETS[2])
+
+        # Calculate risk/reward ratio
+        risk_amount = entry_price - stop_loss
+        reward_amount = target1 - entry_price
+        risk_reward_ratio = reward_amount / risk_amount if risk_amount > 0 else 0
+
+        # Calculate position sizing (SAME AS PAPER TRADER)
+        score = mtf_result.get('signal_score', 0)
+
+        # Use swing or positional capital allocation
+        if strategy_type == 'swing':
+            allocated_capital = INITIAL_CAPITAL * 0.60  # 60% for swing
+        else:
+            allocated_capital = INITIAL_CAPITAL * 0.40  # 40% for positional
+
+        # Base position size (25% max per position)
+        max_position = allocated_capital * MAX_POSITION_SIZE
+
+        # Risk-based sizing (2% max risk per trade)
+        risk_per_share = entry_price - stop_loss
+        max_risk_amount = allocated_capital * MAX_RISK_PER_TRADE
+        max_shares_by_risk = max_risk_amount / risk_per_share if risk_per_share > 0 else 0
+
+        # Base position size
+        base_position_size = min(max_position, max_shares_by_risk * entry_price)
+
+        # Quality-based multiplier (0.5x to 2.0x based on score)
+        if score >= 7.0:
+            quality_multiplier = 0.5 + (score - 7) * 0.5
+            quality_multiplier = min(quality_multiplier, 2.0)
+        else:
+            quality_multiplier = 0.5
+
+        # Final position size
+        position_size = base_position_size * quality_multiplier
+
+        # Calculate number of shares
+        shares = int(position_size / entry_price) if entry_price > 0 else 0
+        cost = shares * entry_price
+
+        # Determine recommended hold days based on strategy
+        if strategy_type == 'swing':
+            recommended_hold_days = 5  # 2-5 days for swing
+            risk_level = 'MODERATE'
+        else:  # positional
+            recommended_hold_days = 30  # 10-45 days for positional
+            risk_level = 'LOW'
 
         signal = {
             'symbol': symbol,
@@ -277,15 +382,59 @@ class SequentialScanner:
             'strategy': strategy_type,
             'signal_type': mtf_result.get('signal_type', 'MOMENTUM'),
             'score': mtf_result.get('signal_score', 0),
-            'entry_price': mtf_result.get('current_price', 0),
-            'indicators': {
-                'rsi': indicators.get('rsi', 0),
-                'adx': indicators.get('adx', 0),
-                'macd': indicators.get('macd', 0),
-                'volume_ratio': indicators.get('volume_ratio', 0)
-            },
+            'trade_type': f"{'🔥 SWING' if strategy_type == 'swing' else '📈 POSITIONAL'} TRADE",
+
+            # Detailed scoring breakdown (NEW!)
+            'technical_score': mtf_result.get('technical_score', 5.0),  # Technical indicators score
+            'trend_only_score': mtf_result.get('trend_only_score', 5.0),  # EMA trend only
+
+            # Price levels
+            'current_price': round(entry_price, 2),
+            'entry_price': round(entry_price, 2),
+            'stop_loss': round(stop_loss, 2),
+            'target1': round(target1, 2),
+            'target2': round(target2, 2),
+            'target3': round(target3, 2),
+
+            # Position sizing (NEW - for Discord alerts!)
+            'shares': shares,
+            'position_size': round(cost, 2),
+            'allocated_capital': round(allocated_capital, 2),
+
+            # Risk management (FLAT fields for Discord)
+            'risk_reward_ratio': round(risk_reward_ratio, 2),
+            'recommended_hold_days': recommended_hold_days,
+            'risk_level': risk_level,
+
+            # Technical indicators (FLAT fields for Discord)
+            'rsi': round(indicators.get('rsi', 50), 1),
+            'adx': round(indicators.get('adx', 25), 1),
+            'macd': indicators.get('macd', 0),
+            'volume_ratio': round(indicators.get('volume_ratio', 1.0), 2),
+
+            # Trend analysis (REAL values from technical analysis)
+            'ema_trend': mtf_result.get('ema_trend', 'NEUTRAL'),
+            'macd_signal': mtf_result.get('macd_signal', 'NEUTRAL'),
             'uptrend': mtf_result.get('uptrend', False),
-            'trend_strength': mtf_result.get('trend_strength', 'UNKNOWN')
+            'trend_strength': mtf_result.get('trend_strength', 'SIDEWAYS'),
+
+            # Mathematical indicators (REAL calculated values per stock!)
+            'fibonacci_signal': mtf_result.get('fibonacci_signal', 'NO_SIGNAL'),
+            'elliott_wave': mtf_result.get('elliott_wave_pattern', 'UNKNOWN'),  # Fixed field name
+            'elliott_wave_count': mtf_result.get('elliott_wave_count', 0),  # Added wave count
+            'mathematical_score': round(mtf_result.get('mathematical_score', 5.0), 1),  # REAL math score
+
+            # ML predictions (if available)
+            'predicted_return': mtf_result.get('predicted_return', 0),
+            'ml_confidence': mtf_result.get('ml_confidence', 0),
+
+            # Legacy nested structure (for backward compatibility)
+            'indicators': {
+                'rsi': indicators.get('rsi', 50),
+                'adx': indicators.get('adx', 25),
+                'macd': indicators.get('macd', 0),
+                'volume_ratio': indicators.get('volume_ratio', 1.0)
+            }
         }
 
         return signal

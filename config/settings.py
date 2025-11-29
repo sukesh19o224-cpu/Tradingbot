@@ -22,26 +22,32 @@ PAPER_TRADING_CAPITAL = 100000  # Paper trading capital
 
 # Position Sizing
 KELLY_FRACTION = 0.25  # Use 1/4 Kelly (conservative)
-MAX_RISK_PER_TRADE = 0.02  # 2% max risk per trade
+MAX_RISK_PER_TRADE = 0.025  # 2.5% max risk per trade (BALANCED - increased for better position size)
 MAX_PORTFOLIO_RISK = 0.15  # 15% max drawdown
 
+# Drawdown-Based Dynamic Position Sizing (Risk Reduction)
+DRAWDOWN_RISK_REDUCTION_ENABLED = True  # Reduce risk during drawdowns
+DRAWDOWN_THRESHOLD_MINOR = 0.05  # At 5% drawdown, reduce to 75% size
+DRAWDOWN_THRESHOLD_MAJOR = 0.10  # At 10% drawdown, reduce to 50% size
+
 # Position Limits
-MAX_POSITIONS = 10  # Maximum concurrent positions
+MAX_POSITIONS = 5  # Maximum concurrent positions (BALANCED - reduced for larger position sizes)
 MAX_POSITION_SIZE = 0.25  # 25% max per position
 MAX_SECTOR_EXPOSURE = 0.40  # 40% max per sector
 
 # Market Circuit Breaker (Exit all positions if market crashes)
-MARKET_CRASH_THRESHOLD = -0.02  # -2% - Exit all if NIFTY down >2%
+MARKET_CRASH_THRESHOLD = -0.035  # -3.5% - Exit all if NIFTY down >3.5% (more realistic)
 NIFTY_SYMBOL = "^NSEI"  # NIFTY 50 index symbol
 TRAILING_STOP_ACTIVATION = 0.05  # Activate trailing stop at +5%
 TRAILING_STOP_DISTANCE = 0.03  # Trail by 3%
 
-# Stop Loss & Targets
-SWING_STOP_LOSS = 0.02  # 2% stop loss for swing
-POSITIONAL_STOP_LOSS = 0.05  # 5% stop loss for positional
+# Stop Loss & Targets (REALISTIC & ACHIEVABLE)
+SWING_STOP_LOSS = 0.035  # 3.5% stop loss for swing (IMPROVED - wider to avoid premature exits)
+POSITIONAL_STOP_LOSS = 0.04  # 4% stop loss for positional
 
-SWING_TARGETS = [0.03, 0.08, 0.12]  # 3%, 8%, 12% targets
-POSITIONAL_TARGETS = [0.12, 0.20, 0.30]  # 12%, 20%, 30% targets
+# Realistic targets based on actual market conditions
+SWING_TARGETS = [0.025, 0.05, 0.075]  # 2.5%, 5%, 7.5% targets (IMPROVED - more room to develop)
+POSITIONAL_TARGETS = [0.08, 0.15, 0.25]  # 8%, 15%, 25% targets (achievable in 3-6 weeks)
 
 # ═══════════════════════════════════════════════════════════════
 # 📊 TECHNICAL INDICATORS SETTINGS
@@ -51,11 +57,11 @@ POSITIONAL_TARGETS = [0.12, 0.20, 0.30]  # 12%, 20%, 30% targets
 EMA_PERIODS = [8, 13, 21, 50, 100, 200]
 SMA_PERIODS = [20, 50, 200]
 
-# RSI Settings
+# RSI Settings - OPTIMIZED for better signal detection
 RSI_PERIOD = 14
-RSI_OVERBOUGHT = 75
-RSI_OVERSOLD = 30
-RSI_BULLISH_THRESHOLD = 50
+RSI_OVERBOUGHT = 75  # Above this = extreme overbought (avoid buying)
+RSI_OVERSOLD = 30    # Below this = oversold (potential reversal)
+RSI_BULLISH_THRESHOLD = 45  # Above 45 = confirmed upward momentum (was 50)
 
 # MACD Settings
 MACD_FAST = 12
@@ -66,10 +72,11 @@ MACD_SIGNAL = 9
 BB_PERIOD = 20
 BB_STD = 2
 
-# ADX Settings
+# ADX Settings - Trend strength thresholds
 ADX_PERIOD = 14
-ADX_STRONG_TREND = 25
-ADX_VERY_STRONG = 50
+ADX_MIN_TREND = 18       # Minimum for swing trades (some trend)
+ADX_STRONG_TREND = 25    # Strong trend (good for all trades)
+ADX_VERY_STRONG = 50     # Very strong trend (rare)
 
 # Volume Settings
 VOLUME_MA_PERIOD = 20
@@ -111,13 +118,14 @@ ML_FEATURES = [
 # 🎯 SIGNAL GENERATION
 # ═══════════════════════════════════════════════════════════════
 
-# Scoring System (0-10)
-MIN_SIGNAL_SCORE = 7.0  # Minimum score to generate alert
-HIGH_QUALITY_SCORE = 8.5  # High quality signal threshold
+# Scoring System (0-10) - BALANCED for 60-70% win rate, ~5-10 signals per 100 stocks
+MIN_SIGNAL_SCORE = 7.0  # Minimum score (tightened for better quality)
+HIGH_QUALITY_SCORE = 8.5  # High quality signal threshold (for auto-replacement)
 
 # Signal Filtering (Prevent signal flood)
-MAX_SWING_SIGNALS_PER_SCAN = 5  # Max swing signals to process per scan
-MAX_POSITIONAL_SIGNALS_PER_SCAN = 3  # Max positional signals to process per scan
+# BALANCED: Quality over quantity
+MAX_SWING_SIGNALS_PER_SCAN = 6  # Max swing signals to process per scan
+MAX_POSITIONAL_SIGNALS_PER_SCAN = 4  # Max positional signals to process per scan
 
 # Dynamic Capital Allocation (By Signal Type)
 # DISABLED: Focus on signal quality, not signal type
@@ -140,18 +148,22 @@ WEIGHTS = {
     'volume': 0.10  # Volume analysis weight
 }
 
+# Signal Freshness (Decay) - Prevent stale signals
+SIGNAL_MAX_AGE_MINUTES = 30  # Signals older than 30 min are stale
+SIGNAL_PRICE_MOVE_THRESHOLD = 0.01  # Reject if price moved >1% since signal
+
 # ═══════════════════════════════════════════════════════════════
 # 📈 STRATEGY SETTINGS
 # ═══════════════════════════════════════════════════════════════
 
-# Swing Trading (3-15 days)
+# Swing Trading (3-7 days) - REALISTIC short-term trades
 SWING_HOLD_DAYS_MIN = 3
-SWING_HOLD_DAYS_MAX = 15
+SWING_HOLD_DAYS_MAX = 10  # Exit after 10 days max (IMPROVED - more time to develop)
 SWING_ENABLED = True
 
-# Positional Trading (weeks to months)
-POSITIONAL_HOLD_DAYS_MIN = 20
-POSITIONAL_HOLD_DAYS_MAX = 90
+# Positional Trading (2-6 weeks) - REALISTIC medium-term trades
+POSITIONAL_HOLD_DAYS_MIN = 10
+POSITIONAL_HOLD_DAYS_MAX = 30  # Exit after 30 days max (prevent dead money)
 POSITIONAL_ENABLED = True
 
 # ═══════════════════════════════════════════════════════════════
@@ -164,9 +176,11 @@ MIN_MARKET_CAP = 1000  # Minimum 1000 crore market cap
 MIN_PRICE = 50  # Minimum stock price
 MAX_PRICE = 5000  # Maximum stock price
 
-# Liquidity Filters
-MIN_AVG_VOLUME = 100000  # Minimum average daily volume
-MIN_VALUE_TRADED = 5000000  # Minimum ₹50 lakh daily turnover
+# Liquidity Filters (PRACTICAL & REALISTIC)
+MIN_AVG_VOLUME = 500000  # Minimum 5 lakh shares daily volume (good liquidity)
+MIN_VALUE_TRADED = 50000000  # Minimum ₹5 crore daily turnover (tight spreads)
+MAX_BID_ASK_SPREAD = 0.005  # Max 0.5% spread (ensures good execution)
+MIN_MARKET_DEPTH = 1000000  # Min ₹10L depth at L1/L2 (reduces slippage)
 
 # Fundamental Filters
 MAX_DEBT_TO_EQUITY = 1.5

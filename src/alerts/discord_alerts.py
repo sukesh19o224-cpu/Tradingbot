@@ -67,6 +67,23 @@ class DiscordAlerts:
             description_parts.append(f"**Type:** {emoji} {trade_type}")
             description_parts.append(f"**Score:** {score}/10 {'🔥' if score >= HIGH_QUALITY_SCORE else ''}")
 
+            # Add strategy type with explanation
+            strategy_type = signal.get('signal_type', 'UNKNOWN')
+            strategy_explanations = {
+                'MOMENTUM': '📈 Strong upward price action with high volume',
+                'BREAKOUT': '💥 Breaking above resistance with strong momentum',
+                'MEAN_REVERSION': '🔄 Pullback to support in uptrend (buy the dip)'
+            }
+            strategy_emoji_map = {
+                'MOMENTUM': '📈',
+                'BREAKOUT': '💥',
+                'MEAN_REVERSION': '🔄'
+            }
+            strategy_emoji = strategy_emoji_map.get(strategy_type, '📊')
+            strategy_reason = strategy_explanations.get(strategy_type, 'Technical setup identified')
+            description_parts.append(f"**Strategy:** {strategy_emoji} {strategy_type}")
+            description_parts.append(f"*{strategy_reason}*")
+
             # Add ML prediction if available
             if signal.get('predicted_return', 0) > 0:
                 pred_return = signal['predicted_return']
@@ -85,12 +102,22 @@ class DiscordAlerts:
             rr_ratio = signal.get('risk_reward_ratio', 0)
 
             # Build fields
+            shares = signal.get('shares', 0)
+            position_size = signal.get('position_size', 0)
+
             fields = [
                 {
-                    "name": "📊 Price & Entry",
-                    "value": f"**Current:** ₹{entry_price:.2f}\n"
-                            f"**RSI:** {signal.get('rsi', 0):.1f}\n"
-                            f"**ADX:** {signal.get('adx', 0):.1f} (Trend Strength)",
+                    "name": "📊 Price & Position",
+                    "value": f"**Entry Price:** ₹{entry_price:.2f}\n"
+                            f"**Shares to Buy:** {shares}\n"
+                            f"**Investment:** ₹{position_size:,.0f}",
+                    "inline": True
+                },
+                {
+                    "name": "📈 Technical Indicators",
+                    "value": f"**RSI:** {signal.get('rsi', 0):.1f}\n"
+                            f"**ADX:** {signal.get('adx', 0):.1f}\n"
+                            f"**Volume:** {signal.get('volume_ratio', 0):.1f}x avg",
                     "inline": True
                 },
                 {
@@ -108,10 +135,10 @@ class DiscordAlerts:
                     "inline": True
                 },
                 {
-                    "name": "📈 Technical Analysis",
-                    "value": f"**Trend:** {signal.get('ema_trend', 'N/A')}\n"
-                            f"**MACD:** {signal.get('macd_signal', 'N/A')}\n"
-                            f"**Volume:** {signal.get('volume_ratio', 0):.1f}x avg",
+                    "name": "📈 Trend Analysis",
+                    "value": f"**EMA Trend:** {signal.get('ema_trend', 'N/A')}\n"
+                            f"**MACD Signal:** {signal.get('macd_signal', 'N/A')}\n"
+                            f"**Strength:** {signal.get('trend_strength', 'N/A')}",
                     "inline": True
                 },
                 {
@@ -182,14 +209,23 @@ class DiscordAlerts:
         try:
             symbol = exit_info['symbol']
             exit_price = exit_info['exit_price']
+            entry_price = exit_info.get('entry_price', 0)
             pnl = exit_info['pnl']
             pnl_percent = exit_info['pnl_percent']
             reason = exit_info['reason']
+            shares = exit_info.get('shares', 0)
 
             # Mode indicator
             mode = " [PAPER]" if paper_trade else ""
 
-            # Strategy indicator
+            # Strategy indicator - try from exit_info first, then parameter
+            trade_type = exit_info.get('trade_type', '')
+            if not strategy:
+                if 'SWING' in trade_type:
+                    strategy = 'swing'
+                elif 'POSITIONAL' in trade_type:
+                    strategy = 'positional'
+
             if strategy == 'swing':
                 strategy_emoji = "🔥"
                 strategy_name = "SWING"
@@ -213,23 +249,53 @@ class DiscordAlerts:
             # Exit type
             exit_type = exit_info.get('exit_type', 'FULL')
 
+            # Parse which target was hit from reason
+            target_hit = "UNKNOWN"
+            if 'TARGET_1' in reason:
+                target_hit = "🎯 T1 (First Target)"
+            elif 'TARGET_2' in reason:
+                target_hit = "🎯 T2 (Second Target)"
+            elif 'TARGET_3' in reason:
+                target_hit = "🎯 T3 (Final Target)"
+            elif 'STOP_LOSS' in reason:
+                target_hit = "⛔ Stop Loss Hit"
+            elif 'MAX_HOLDING' in reason:
+                target_hit = "⏰ Max Holding Period"
+
             description = f"**Strategy:** {strategy_emoji} {strategy_name}\n" if strategy_name else ""
-            description += f"**Result:** {result}\n**Reason:** {reason}\n**Exit Type:** {exit_type}"
+            description += f"**Result:** {result}\n**Exit Trigger:** {target_hit}\n**Exit Type:** {exit_type}"
+
+            # Get targets if available
+            t1 = exit_info.get('target1', 0)
+            t2 = exit_info.get('target2', 0)
+            t3 = exit_info.get('target3', 0)
 
             fields = [
                 {
                     "name": "💰 Profit/Loss",
                     "value": f"**Amount:** ₹{pnl:+,.0f}\n"
                             f"**Return:** {pnl_percent:+.2f}%\n"
-                            f"**Shares:** {exit_info.get('shares', 0)}",
+                            f"**Shares Sold:** {shares}",
                     "inline": True
                 },
                 {
-                    "name": "📊 Exit Price",
-                    "value": f"₹{exit_price:.2f}",
+                    "name": "📊 Price Details",
+                    "value": f"**Entry:** ₹{entry_price:.2f}\n"
+                            f"**Exit:** ₹{exit_price:.2f}\n"
+                            f"**Move:** {pnl_percent:+.2f}%",
                     "inline": True
                 }
             ]
+
+            # Add targets field if available
+            if t1 > 0 and t2 > 0 and t3 > 0:
+                fields.append({
+                    "name": "🎯 Targets (Reference)",
+                    "value": f"**T1:** ₹{t1:.2f}\n"
+                            f"**T2:** ₹{t2:.2f}\n"
+                            f"**T3:** ₹{t3:.2f}",
+                    "inline": True
+                })
 
             embed = {
                 "title": f"{emoji} EXIT{mode} - {symbol}",

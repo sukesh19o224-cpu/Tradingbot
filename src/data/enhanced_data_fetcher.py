@@ -1,8 +1,12 @@
 """
 🚀 ENHANCED DATA FETCHER - Perfect Data for Analysis
-Fetches BOTH daily (3 months) AND 15-minute (today) data for each stock
+Fetches BOTH daily (90 days) AND 15-minute (1 day) data for each stock
 
 This is THE KEY to making the system work properly!
+
+Data Strategy:
+- Daily: 3 months (90 days) - Enough for all technical indicators
+- Intraday: 1 day (15-min candles) - Most reliable with yfinance
 """
 
 import yfinance as yf
@@ -23,10 +27,11 @@ class EnhancedDataFetcher:
     Enhanced Data Fetcher with DUAL data streams
 
     For each stock, fetches:
-    1. 3 months of DAILY candles (for trend analysis, moving averages, etc.)
-    2. Today's 15-MINUTE candles (for intraday signals)
+    1. 90 days (3mo) of DAILY candles (for trend analysis, moving averages, etc.)
+    2. 1 day of 15-MINUTE candles (for current intraday signals)
 
     Both datasets are properly normalized and ready for analysis.
+    Uses most reliable yfinance periods to avoid API errors.
     """
 
     def __init__(self, api_delay: float = 0.3):
@@ -37,6 +42,8 @@ class EnhancedDataFetcher:
             api_delay: Delay in seconds between API calls (0.3s = safe)
         """
         self.api_delay = api_delay
+        self.daily_period = '3mo'  # 90 days daily data (reliable)
+        self.intraday_period = '1d'  # 1 day 15-min data (most reliable)
         self.stats = {
             'total_attempts': 0,
             'successful': 0,
@@ -54,8 +61,8 @@ class EnhancedDataFetcher:
 
         Returns:
             Dict with keys:
-                - 'daily': DataFrame with 3 months daily data
-                - 'intraday': DataFrame with today's 15-min data
+                - 'daily': DataFrame with 90 days daily data
+                - 'intraday': DataFrame with 1 day 15-min data
                 - 'success': True if at least daily data fetched
                 - 'symbol': Symbol name
         """
@@ -107,7 +114,7 @@ class EnhancedDataFetcher:
 
     def _fetch_daily_data(self, symbol: str, max_retries: int = 2) -> Optional[pd.DataFrame]:
         """
-        Fetch 3 months of DAILY data
+        Fetch 60-90 days of DAILY data (configurable)
 
         Args:
             symbol: Stock symbol
@@ -123,8 +130,8 @@ class EnhancedDataFetcher:
 
                 ticker = yf.Ticker(symbol)
 
-                # Fetch 3 months of daily data
-                df = ticker.history(period='3mo', interval='1d')
+                # Fetch daily data (3mo = ~90 days, reliable with yfinance)
+                df = ticker.history(period=self.daily_period, interval='1d')
 
                 if not df.empty and len(df) >= 30:  # Need at least 30 days
                     return df
@@ -136,7 +143,7 @@ class EnhancedDataFetcher:
 
     def _fetch_intraday_data(self, symbol: str, max_retries: int = 2) -> Optional[pd.DataFrame]:
         """
-        Fetch today's 15-MINUTE data
+        Fetch today's 15-MINUTE data (1 day only - most reliable)
 
         Args:
             symbol: Stock symbol
@@ -152,19 +159,13 @@ class EnhancedDataFetcher:
 
                 ticker = yf.Ticker(symbol)
 
-                # Fetch last 5 days of 15-min data (includes today)
-                df = ticker.history(period='5d', interval='15m')
+                # Fetch 1 day of 15-min data (most reliable with yfinance)
+                df = ticker.history(period=self.intraday_period, interval='15m')
 
                 if not df.empty:
-                    # Filter to today only
-                    today = datetime.now().date()
-                    df_today = df[df.index.date == today]
-
-                    if not df_today.empty:
-                        return df_today
-                    else:
-                        # Market might be closed, return last day's data
-                        return df.tail(26)  # Last ~6.5 hours of 15-min candles
+                    # Return today's intraday data
+                    # If market closed, returns last available candles
+                    return df
 
             except Exception:
                 continue
