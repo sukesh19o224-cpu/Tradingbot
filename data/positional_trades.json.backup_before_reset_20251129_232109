@@ -1,0 +1,14 @@
+[
+  {
+    "symbol": "BTML.NS",
+    "entry_price": 9.15,
+    "exit_price": 8.630000114440918,
+    "shares": 15,
+    "entry_date": "2025-11-28T05:21:45.916610",
+    "exit_date": "2025-11-28T08:47:10.580257",
+    "pnl": -7.7999982833862305,
+    "pnl_percent": -5.683058858569206,
+    "reason": "STOP_LOSS",
+    "trade_type": "\ud83d\udcc8 POSITIONAL TRADE"
+  }
+]

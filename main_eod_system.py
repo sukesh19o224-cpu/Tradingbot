@@ -334,9 +334,17 @@ class EODIntradaySystem:
                     if (last_scan_time is None or
                             (datetime.now() - last_scan_time).seconds >= SCAN_INTERVAL_MINUTES * 60):
 
+                        # Remove old signal file before scanning
+                        if os.path.exists('data/.strategy1_complete'):
+                            os.remove('data/.strategy1_complete')
+                        
                         scan_result = self.run_intraday_scan()
                         self.process_signals(scan_result)
                         last_scan_time = datetime.now()
+                        
+                        # Signal Strategy 2 that scan is complete
+                        with open('data/.strategy1_complete', 'w') as f:
+                            f.write(datetime.now().isoformat())
 
                     # Monitor positions
                     if (last_monitor_time is None or

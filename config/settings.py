@@ -159,12 +159,12 @@ SIGNAL_PRICE_MOVE_THRESHOLD = 0.01  # Reject if price moved >1% since signal
 
 # Swing Trading (3-7 days) - STRICT quality only (30% capital)
 SWING_HOLD_DAYS_MIN = 3
-SWING_HOLD_DAYS_MAX = 10  # Exit after 10 days max (IMPROVED - more time to develop)
+SWING_HOLD_DAYS_MAX = 7  # Exit after 7 days max
 SWING_ENABLED = True  # ENABLED - STRICT criteria, only top-tier swing setups (score >= 8.0, ADX >= 30)
 
 # Positional Trading (INTERMEDIATE) - High quality setups, faster exits
 POSITIONAL_HOLD_DAYS_MIN = 5  # Minimum 5 days (was 10)
-POSITIONAL_HOLD_DAYS_MAX = 14  # Maximum 14 days (was 30) - INTERMEDIATE timeframe
+POSITIONAL_HOLD_DAYS_MAX = 15  # Maximum 15 days
 POSITIONAL_ENABLED = True
 
 # ═══════════════════════════════════════════════════════════════
