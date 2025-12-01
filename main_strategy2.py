@@ -163,15 +163,25 @@ class Strategy2TradingSystem:
         swing_stats = self.portfolio.get_swing_portfolio_stats()
         pos_stats = self.portfolio.get_positional_portfolio_stats()
         
-        print(f"\n💼 SWING Portfolio: {swing_stats['active_positions']}/5 positions")
-        print(f"   Capital: ₹{swing_stats['used_capital']:,.0f} / ₹50,000")
-        print(f"   P&L: ₹{swing_stats['total_pnl']:,.0f} ({swing_stats['total_pnl_pct']:.2f}%)")
+        # Calculate used capital
+        swing_used = 50000 - swing_stats.get('capital', 50000)
+        pos_used = 50000 - pos_stats.get('capital', 50000)
         
-        print(f"\n💼 POSITIONAL Portfolio: {pos_stats['active_positions']}/5 positions")
-        print(f"   Capital: ₹{pos_stats['used_capital']:,.0f} / ₹50,000")
-        print(f"   P&L: ₹{pos_stats['total_pnl']:,.0f} ({pos_stats['total_pnl_pct']:.2f}%)")
+        # Calculate total P&L
+        swing_pnl = swing_stats.get('realized_pnl', 0) + swing_stats.get('unrealized_pnl', 0)
+        pos_pnl = pos_stats.get('realized_pnl', 0) + pos_stats.get('unrealized_pnl', 0)
+        swing_pnl_pct = (swing_pnl / 50000 * 100) if swing_used > 0 else 0
+        pos_pnl_pct = (pos_pnl / 50000 * 100) if pos_used > 0 else 0
         
-        total_pnl = swing_stats['total_pnl'] + pos_stats['total_pnl']
+        print(f"\n💼 SWING Portfolio: {swing_stats.get('open_positions', 0)}/5 positions")
+        print(f"   Capital: ₹{swing_used:,.0f} / ₹50,000")
+        print(f"   P&L: ₹{swing_pnl:,.0f} ({swing_pnl_pct:.2f}%)")
+        
+        print(f"\n💼 POSITIONAL Portfolio: {pos_stats.get('open_positions', 0)}/5 positions")
+        print(f"   Capital: ₹{pos_used:,.0f} / ₹50,000")
+        print(f"   P&L: ₹{pos_pnl:,.0f} ({pos_pnl_pct:.2f}%)")
+        
+        total_pnl = swing_pnl + pos_pnl
         print(f"\n💰 TOTAL P&L: ₹{total_pnl:,.0f}")
         print("="*70)
     

@@ -136,7 +136,13 @@ class DualPortfolioStrategy2:
         swing_stats = self.get_swing_portfolio_stats()
         pos_stats = self.get_positional_portfolio_stats()
 
-        total_pnl = swing_stats['total_pnl'] + pos_stats['total_pnl']
+        # Use correct keys from get_summary()
+        swing_realized = swing_stats.get('realized_pnl', 0)
+        swing_unrealized = swing_stats.get('unrealized_pnl', 0)
+        pos_realized = pos_stats.get('realized_pnl', 0)
+        pos_unrealized = pos_stats.get('unrealized_pnl', 0)
+        
+        total_pnl = swing_realized + swing_unrealized + pos_realized + pos_unrealized
         total_pnl_pct = (total_pnl / self.total_initial_capital) * 100
 
         return {
