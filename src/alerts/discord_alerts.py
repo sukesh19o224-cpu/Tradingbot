@@ -50,9 +50,14 @@ class DiscordAlerts:
             entry_price = signal['entry_price']
             score = signal['score']
             trade_type = signal['trade_type']
+            
+            # Check if this is Strategy 2
+            strategy_prefix = ""
+            if 'strategy_name' in signal:
+                strategy_prefix = "🎯 STRATEGY 2 - "
 
             # Choose emoji and color based on trade type
-            if trade_type == 'SWING':
+            if 'SWING' in trade_type:
                 emoji = '⚡'
                 color = 3447003  # Blue
             else:  # POSITIONAL
@@ -62,33 +67,58 @@ class DiscordAlerts:
             # Mode indicator
             mode = " [PAPER]" if paper_trade else ""
 
-            # Build description
+            # Build description with industry-standard metrics
             description_parts = []
             description_parts.append(f"**Type:** {emoji} {trade_type}")
-            description_parts.append(f"**Score:** {score}/10 {'🔥' if score >= HIGH_QUALITY_SCORE else ''}")
+            description_parts.append(f"**Signal Score:** {score}/10 {'🔥' if score >= HIGH_QUALITY_SCORE else ''}")
 
-            # Add strategy type with explanation
+            # Add strategy type with industry-standard explanations
             strategy_type = signal.get('signal_type', 'UNKNOWN')
+            
+            # Get quality score based on strategy type
+            if strategy_type == 'MEAN_REVERSION':
+                quality_score = signal.get('mean_reversion_score', 0)
+                quality_valid = signal.get('mean_reversion_valid', False)
+            elif strategy_type == 'BREAKOUT':
+                quality_score = signal.get('breakout_score', 0)
+                quality_valid = signal.get('breakout_valid', False)
+            else:  # MOMENTUM
+                quality_score = signal.get('momentum_score', 0)
+                quality_valid = signal.get('momentum_valid', False)
+            
             strategy_explanations = {
-                'MOMENTUM': '📈 Strong upward price action with high volume',
+                'MOMENTUM': '📈 Strong upward price action (RSI 60-70, ADX ≥25, above 50-MA)',
                 'BREAKOUT': '💥 Breaking above resistance with strong momentum',
-                'MEAN_REVERSION': '🔄 Pullback to support in uptrend (buy the dip)'
+                'MEAN_REVERSION': '🔄 Pullback to support in uptrend (RSI 30-45, price <20-MA, >50-MA)'
             }
             strategy_emoji_map = {
                 'MOMENTUM': '📈',
                 'BREAKOUT': '💥',
                 'MEAN_REVERSION': '🔄'
             }
+            
+            # Quality thresholds
+            min_quality = 50 if strategy_type == 'MEAN_REVERSION' else 60
+            quality_status = '✅' if quality_valid and quality_score >= min_quality else '⚠️'
+            
             strategy_emoji = strategy_emoji_map.get(strategy_type, '📊')
             strategy_reason = strategy_explanations.get(strategy_type, 'Technical setup identified')
             description_parts.append(f"**Strategy:** {strategy_emoji} {strategy_type}")
+            description_parts.append(f"**Quality Score:** {quality_score}/100 {quality_status} (min {min_quality})")
             description_parts.append(f"*{strategy_reason}*")
 
-            # Add ML prediction if available
-            if signal.get('predicted_return', 0) > 0:
-                pred_return = signal['predicted_return']
-                ml_conf = signal['ml_confidence']
-                description_parts.append(f"**AI Prediction:** +{pred_return:.1f}% ({ml_conf*100:.0f}% confidence)")
+            # Add RS (Relative Strength) rating if available
+            rs_rating = signal.get('rs_rating', 0)
+            if rs_rating > 0:
+                if rs_rating >= 120:
+                    rs_status = '🚀 Exceptional'
+                elif rs_rating >= 110:
+                    rs_status = '⭐ Strong'
+                elif rs_rating >= 100:
+                    rs_status = '👍 Good'
+                else:
+                    rs_status = '⚠️ Weak'
+                description_parts.append(f"**RS Rating:** {rs_rating:.0f} {rs_status} (vs Nifty 50)")
 
             description = "\n".join(description_parts)
 
@@ -100,11 +130,100 @@ class DiscordAlerts:
             # Risk metrics
             risk_percent = ((entry_price - signal['stop_loss']) / entry_price * 100)
             rr_ratio = signal.get('risk_reward_ratio', 0)
+            # Calculate R:R if not provided
+            if rr_ratio == 0 and risk_percent > 0:
+                rr_ratio = target2_profit / risk_percent
+            
+            # Determine strategy from trade_type
+            strategy = 'positional'  # default
+            if 'SWING' in trade_type:
+                strategy = 'swing'
+            elif 'POSITIONAL' in trade_type:
+                strategy = 'positional'
+            
+            # Determine stop loss type based on strategy and signal type
+            signal_type = signal.get('signal_type', 'UNKNOWN')
+            if strategy == 'swing':
+                stop_type = "Swing (2.5-3%)"
+            elif strategy == 'positional':
+                if 'MEAN_REVERSION' in signal_type:
+                    stop_type = "Mean Reversion (4.5%)"
+                elif 'MOMENTUM' in signal_type:
+                    stop_type = "Momentum (4%)"
+                elif 'BREAKOUT' in signal_type:
+                    stop_type = "Breakout (3.5%)"
+                else:
+                    stop_type = f"ATR-based ({risk_percent:.1f}%)"
+            else:
+                stop_type = f"ATR-based ({risk_percent:.1f}%)"
 
             # Build fields
             shares = signal.get('shares', 0)
             position_size = signal.get('position_size', 0)
 
+            # Get quality reasons based on strategy type
+            if strategy_type == 'MEAN_REVERSION':
+                quality_reasons = signal.get('mean_reversion_reasons', [])
+            elif strategy_type == 'BREAKOUT':
+                quality_reasons = signal.get('breakout_reasons', [])
+            else:  # MOMENTUM
+                quality_reasons = signal.get('momentum_reasons', [])
+            quality_text = "\n".join(f"• {reason}" for reason in quality_reasons[:3]) if quality_reasons else "Industry-standard filters applied"
+            
+            # Get ADX and momentum indicators
+            rsi = signal.get('rsi', 0)
+            adx = signal.get('adx', 0)
+            volume_ratio = signal.get('volume_ratio', 1.0)  # Default to 1.0 instead of 0
+            
+            # ADX strength indicator
+            if adx >= 40:
+                adx_status = '💪 Very Strong'
+            elif adx >= 25:
+                adx_status = '👍 Strong'
+            elif adx >= 20:
+                adx_status = '⚠️ Moderate'
+            elif adx > 0:
+                adx_status = '❌ Weak'
+            else:
+                adx_status = 'N/A'
+            
+            # RSI status based on strategy
+            if rsi > 0:  # Only show status if RSI is available
+                if strategy_type == 'MEAN_REVERSION':
+                    if 30 <= rsi <= 40:
+                        rsi_status = '✅ Optimal'
+                    elif 40 < rsi <= 50:
+                        rsi_status = '👍 Good'
+                    else:
+                        rsi_status = '⚠️ Check'
+                else:  # MOMENTUM
+                    if 60 <= rsi <= 68:
+                        rsi_status = '✅ Optimal'
+                    elif 50 <= rsi < 60 or 68 < rsi <= 70:
+                        rsi_status = '👍 Good'
+                    else:
+                        rsi_status = '⚠️ Check'
+            else:
+                rsi_status = ''
+            
+            # MA position
+            ema_20 = signal.get('ema_20', 0)
+            ema_50 = signal.get('ema_50', 0)
+            price_to_ema20 = ((entry_price - ema_20) / ema_20 * 100) if ema_20 > 0 else 0
+            price_to_ema50 = ((entry_price - ema_50) / ema_50 * 100) if ema_50 > 0 else 0
+            
+            # MACD signal
+            macd_signal = signal.get('macd_signal', '')
+            if not macd_signal or macd_signal == 'N/A':
+                macd_value = signal.get('macd', 0)
+                macd_hist = signal.get('macd_histogram', 0)
+                if macd_hist > 0:
+                    macd_signal = '✅ Bullish'
+                elif macd_hist < 0:
+                    macd_signal = '⚠️ Bearish'
+                else:
+                    macd_signal = 'Neutral'
+            
             fields = [
                 {
                     "name": "📊 Price & Position",
@@ -114,10 +233,10 @@ class DiscordAlerts:
                     "inline": True
                 },
                 {
-                    "name": "📈 Technical Indicators",
-                    "value": f"**RSI:** {signal.get('rsi', 0):.1f}\n"
-                            f"**ADX:** {signal.get('adx', 0):.1f}\n"
-                            f"**Volume:** {signal.get('volume_ratio', 0):.1f}x avg",
+                    "name": "📈 Key Indicators",
+                    "value": (f"**RSI:** {rsi:.1f} {rsi_status}\n" if rsi > 0 else "**RSI:** N/A\n") +
+                            (f"**ADX:** {adx:.1f} {adx_status}\n" if adx > 0 else "**ADX:** N/A\n") +
+                            f"**Volume:** {volume_ratio:.1f}x avg",
                     "inline": True
                 },
                 {
@@ -129,50 +248,48 @@ class DiscordAlerts:
                 },
                 {
                     "name": "⛔ Risk Management",
-                    "value": f"**Stop Loss:** ₹{signal['stop_loss']:.2f}\n"
-                            f"**Risk:** {risk_percent:.1f}%\n"
-                            f"**R:R Ratio:** {rr_ratio:.1f}:1",
+                    "value": f"**Stop Loss:** ₹{signal['stop_loss']:.2f} (-{risk_percent:.1f}%)\n"
+                            f"**Stop Type:** {stop_type}\n"
+                            (f"**R:R Ratio:** 1:{rr_ratio:.1f}" if rr_ratio > 0 else "**R:R Ratio:** Calculating..."),
                     "inline": True
                 },
                 {
-                    "name": "📈 Trend Analysis",
-                    "value": f"**EMA Trend:** {signal.get('ema_trend', 'N/A')}\n"
-                            f"**MACD Signal:** {signal.get('macd_signal', 'N/A')}\n"
-                            f"**Strength:** {signal.get('trend_strength', 'N/A')}",
+                    "name": "📍 Price Position",
+                    "value": (f"**20-MA:** ₹{ema_20:.2f} ({price_to_ema20:+.1f}%)\n" if ema_20 > 0 else "**20-MA:** N/A\n") +
+                            (f"**50-MA:** ₹{ema_50:.2f} ({price_to_ema50:+.1f}%)\n" if ema_50 > 0 else "**50-MA:** N/A\n") +
+                            f"**MACD:** {macd_signal}",
                     "inline": True
                 },
                 {
-                    "name": "🔬 Mathematical",
-                    "value": f"**Fibonacci:** {signal.get('fibonacci_signal', 'N/A')}\n"
-                            f"**Elliott Wave:** {signal.get('elliott_wave', 'N/A')}\n"
-                            f"**Math Score:** {signal.get('mathematical_score', 0):.1f}/10",
+                    "name": "✅ Quality Factors",
+                    "value": quality_text,
                     "inline": True
                 },
                 {
                     "name": "⏱️ Hold Period",
-                    "value": f"**Recommended:** {signal.get('recommended_hold_days', 0)} days\n"
-                            f"**Risk Level:** {signal.get('risk_level', 'N/A')}",
+                    "value": f"**Recommended:** {signal.get('recommended_hold_days', 7)} days\n"
+                            f"**Max Holding:** {signal.get('max_hold_days', 15)} days",
                     "inline": True
                 }
             ]
 
             embed = {
-                "title": f"{emoji} BUY SIGNAL{mode} - {symbol}",
+                "title": f"{strategy_prefix}{emoji} BUY SIGNAL{mode} - {symbol}",
                 "description": description,
                 "color": color,
                 "fields": fields,
                 "footer": {
-                    "text": f"Super Math Trading System | {self._get_ist_time()}"
+                    "text": f"Industry-Standard Trading System | {self._get_ist_time()}"
                 },
                 "thumbnail": {
                     "url": "https://cdn-icons-png.flaticon.com/512/2936/2936233.png"  # Chart icon
                 }
             }
 
-            # Mention @everyone for high-quality signals
+            # Mention @everyone for A+ quality signals (quality score ≥70 and signal score ≥8.5)
             content = ""
-            if score >= HIGH_QUALITY_SCORE and DISCORD_MENTION_ON_HIGH_SCORE:
-                content = "@everyone 🔥 HIGH QUALITY SIGNAL!"
+            if quality_score >= 70 and score >= 8.5 and DISCORD_MENTION_ON_HIGH_SCORE:
+                content = "@everyone 🔥 A+ QUALITY SIGNAL! (Industry Standard)"
 
             data = {
                 "content": content,
@@ -217,6 +334,11 @@ class DiscordAlerts:
 
             # Mode indicator
             mode = " [PAPER]" if paper_trade else ""
+            
+            # Check if this is Strategy 2
+            strategy_prefix = ""
+            if 'strategy_name' in exit_info:
+                strategy_prefix = "🎯 STRATEGY 2 - "
 
             # Strategy indicator - try from exit_info first, then parameter
             trade_type = exit_info.get('trade_type', '')
@@ -298,12 +420,12 @@ class DiscordAlerts:
                 })
 
             embed = {
-                "title": f"{emoji} EXIT{mode} - {symbol}",
+                "title": f"{strategy_prefix}{emoji} EXIT{mode} - {symbol}",
                 "description": description,
                 "color": color,
                 "fields": fields,
                 "footer": {
-                    "text": f"Super Math Trading System | {self._get_ist_time()}"
+                    "text": f"Industry-Standard Trading System | {self._get_ist_time()}"
                 }
             }
 
@@ -367,7 +489,7 @@ class DiscordAlerts:
                     }
                 ],
                 "footer": {
-                    "text": f"Super Math Trading System | {self._get_ist_time()}"
+                    "text": f"Industry-Standard Trading System | {self._get_ist_time()}"
                 }
             }
 
@@ -400,16 +522,17 @@ class DiscordAlerts:
         try:
             embed = {
                 "title": "🧪 Test Alert - System Active!",
-                "description": "Super Math Trading System is operational!\n\n"
+                "description": "Industry-Standard Trading System is operational!\n\n"
                               "**Features:**\n"
-                              "✅ Technical Analysis (RSI, MACD, EMA, etc.)\n"
-                              "✅ Mathematical Models (Fibonacci, Elliott Wave, Gann)\n"
-                              "✅ Machine Learning Predictions\n"
+                              "✅ Mean Reversion: RSI 30-45, Price <20-MA, >50-MA\n"
+                              "✅ Momentum: RSI 60-70, ADX ≥25 mandatory\n"
+                              "✅ Relative Strength (RS) vs Nifty 50 benchmark\n"
+                              "✅ Quality Scoring: 50+ MR, 60+ Momentum\n"
                               "✅ Paper Trading Auto-Execution\n"
                               "✅ Real-time Discord Alerts",
                 "color": 3447003,  # Blue
                 "footer": {
-                    "text": f"Super Math Trading System | {self._get_ist_time()}"
+                    "text": f"Industry-Standard Trading System | {self._get_ist_time()}"
                 }
             }
 

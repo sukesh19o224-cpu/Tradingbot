@@ -1,0 +1,10 @@
+{
+  "capital": 15000,
+  "available_capital": 15000,
+  "positions": [],
+  "closed_trades": [],
+  "total_trades": 0,
+  "winning_trades": 0,
+  "losing_trades": 0,
+  "total_profit": 0
+}

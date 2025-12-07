@@ -10,11 +10,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ═══════════════════════════════════════════════════════════════
-# 💰 CAPITAL & PORTFOLIO SETTINGS
+# 💰 CAPITAL & PORTFOLIO SETTINGS - DUAL INDEPENDENT PORTFOLIOS
 # ═══════════════════════════════════════════════════════════════
 
-INITIAL_CAPITAL = 100000  # Starting capital (₹)
-PAPER_TRADING_CAPITAL = 100000  # Paper trading capital
+# POSITIONAL Portfolio (REAL MONEY - Primary Strategy)
+INITIAL_CAPITAL = 50000  # Positional capital (₹50,000) - REAL MONEY
+PAPER_TRADING_CAPITAL = 50000  # Positional paper trading
+
+# SWING Portfolio (PAPER TRADING - Testing Phase)
+SWING_CAPITAL = 25000  # Swing capital (₹25,000) - PAPER ONLY for now
+# NOTE: Swing is completely separate portfolio with own P&L tracking
+# Once proven profitable in paper trading, can deploy with real money
 
 # ═══════════════════════════════════════════════════════════════
 # 🎯 RISK MANAGEMENT (Kelly Criterion Based)
@@ -30,9 +36,10 @@ DRAWDOWN_RISK_REDUCTION_ENABLED = True  # Reduce risk during drawdowns
 DRAWDOWN_THRESHOLD_MINOR = 0.05  # At 5% drawdown, reduce to 75% size
 DRAWDOWN_THRESHOLD_MAJOR = 0.10  # At 10% drawdown, reduce to 50% size
 
-# Position Limits
-MAX_POSITIONS = 7  # Maximum concurrent positions per portfolio (7 × ₹10k = ₹70k positional, 3 × ₹10k = ₹30k swing)
-MAX_POSITION_SIZE = 0.25  # 25% max per position
+# Position Limits (Per Portfolio)
+MAX_POSITIONS = 6  # Positional: 6 positions max (6 × ₹8.3K = ₹50K)
+MAX_POSITIONS_SWING = 3  # Swing: 3 positions max (3 × ₹8.3K = ₹25K) - STRICT: Only A+ setups
+MAX_POSITION_SIZE = 0.20  # 20% max per position (₹10K from ₹50K)
 MAX_SECTOR_EXPOSURE = 0.40  # 40% max per sector
 
 # Market Circuit Breaker (Exit all positions if market crashes)
@@ -41,13 +48,60 @@ NIFTY_SYMBOL = "^NSEI"  # NIFTY 50 index symbol
 TRAILING_STOP_ACTIVATION = 0.03  # Activate trailing stop at +3% (STRICT - earlier activation)
 TRAILING_STOP_DISTANCE = 0.02  # Trail by 2% (STRICT - tighter trailing)
 
-# Stop Loss & Targets (REALISTIC & ACHIEVABLE)
-SWING_STOP_LOSS = 0.035  # 3.5% stop loss for swing (IMPROVED - wider to avoid premature exits)
+# Stop Loss & Targets - FAST PROFIT SWING (5 days max)
+SWING_STOP_LOSS = 0.025  # 2.5% stop loss for swing (TIGHT - only strong momentum stocks)
 POSITIONAL_STOP_LOSS = 0.04  # 4% stop loss for positional
 
-# Realistic targets based on actual market conditions
-SWING_TARGETS = [0.025, 0.05, 0.075]  # 2.5%, 5%, 7.5% targets (IMPROVED - more room to develop)
+# ATR-Based Dynamic Stop Loss (Volatility-Adjusted)
+# Adapts stop loss to each stock's volatility - prevents premature exits
+USE_ATR_STOP_LOSS = True  # Enable ATR-based stop loss (recommended)
+ATR_PERIOD = 14  # 14-day ATR calculation period
+ATR_MULTIPLIER_SWING = 2.0  # 2x ATR for swing (more room for volatile stocks)
+ATR_MULTIPLIER_POSITIONAL = 2.5  # 2.5x ATR for positional (wider stop)
+ATR_MIN_STOP_LOSS = 0.02  # Minimum 2% stop loss (safety floor)
+ATR_MAX_STOP_LOSS = 0.06  # Maximum 6% stop loss (safety ceiling)
+
+# SWING: Fast-moving targets (4%/7%/10%) - hit within 5 days, 2 days buffer
+# Risk/Reward: 2.5% risk → 4%/7%/10% reward = 1.6:1 to 4:1 ratio (EXCELLENT)
+SWING_TARGETS = [0.04, 0.07, 0.10]  # 4%, 7%, 10% targets (FAST PROFIT - 5 days)
 POSITIONAL_TARGETS = [0.05, 0.10, 0.15]  # 5%, 10%, 15% targets (INTERMEDIATE - achievable in 1-2 weeks)
+
+# ═══════════════════════════════════════════════════════════════
+# 🎯 STRATEGY-SPECIFIC CONFIGURATIONS
+# ═══════════════════════════════════════════════════════════════
+
+# MEAN REVERSION Strategy - Buy the dip, wait for bounce
+# AGGRESSIVE: Expanded RSI range to catch earlier pullbacks
+MEAN_REVERSION_CONFIG = {
+    'STOP_LOSS': 0.045,  # 4.5% stop loss (tighter for better R/R - was 5.5%)
+    'TARGETS': [0.05, 0.10, 0.15],  # 5%, 10%, 15% targets
+    'MIN_PULLBACK_PCT': 5.0,  # Minimum 5% pullback (was 8% - more lenient)
+    'MAX_PULLBACK_PCT': 25.0,  # Maximum 25% pullback (deeper = riskier)
+    'REQUIRE_UPTREND': True,  # Must be above 50-day MA
+    'MIN_RSI_BOUNCE': 30,  # RSI must bounce above 30 (more lenient)
+    'MAX_RSI': 55,  # RSI should be < 55 for mean reversion (expanded from 50)
+    'VOLUME_SPIKE_MIN': 1.2,  # Minimum 1.2x volume (was 1.3x - more lenient)
+}
+
+# MOMENTUM Strategy - Ride strong trends
+MOMENTUM_CONFIG = {
+    'STOP_LOSS': 0.04,  # 4% stop loss (tighter = better R/R)
+    'TARGETS': [0.05, 0.10, 0.15],  # 5%, 10%, 15% targets
+    'MIN_ADX': 25,  # Strong trend
+    'MIN_RSI': 50,  # Above 50
+    'MAX_RSI': 68,  # Below 68 (avoid overbought - was 70)
+    'MAX_DISTANCE_FROM_MA20': 12.0,  # Not more than 12% above 20-day MA (avoid extended)
+    'MIN_VOLUME_RATIO': 1.3,  # Minimum 1.3x volume (balanced - not too strict)
+    'REQUIRE_ABOVE_MA50': True,  # Must be above 50-day MA
+    'TRAILING_STOP_ACTIVATION': 0.02,  # Activate trailing at +2% (was +3%)
+}
+
+# BREAKOUT Strategy - Breaking resistance
+BREAKOUT_CONFIG = {
+    'STOP_LOSS': 0.035,  # 3.5% stop loss
+    'TARGETS': [0.06, 0.12, 0.18],  # 6%, 12%, 18% targets
+    'MIN_VOLUME_SURGE': 2.0,  # 2x volume on breakout
+}
 
 # ═══════════════════════════════════════════════════════════════
 # 📊 TECHNICAL INDICATORS SETTINGS
@@ -57,11 +111,12 @@ POSITIONAL_TARGETS = [0.05, 0.10, 0.15]  # 5%, 10%, 15% targets (INTERMEDIATE - 
 EMA_PERIODS = [8, 13, 21, 50, 100, 200]
 SMA_PERIODS = [20, 50, 200]
 
-# RSI Settings - OPTIMIZED for better signal detection
+# RSI Settings - SWING needs strong momentum (50-70 range)
 RSI_PERIOD = 14
-RSI_OVERBOUGHT = 75  # Above this = extreme overbought (avoid buying)
+RSI_OVERBOUGHT = 70  # Above 70 = overbought (avoid for swing - too late)
 RSI_OVERSOLD = 30    # Below this = oversold (potential reversal)
-RSI_BULLISH_THRESHOLD = 45  # Above 45 = confirmed upward momentum (was 50)
+RSI_BULLISH_THRESHOLD = 50  # Swing needs RSI 50-70 (strong momentum zone)
+RSI_SWING_MAX = 70   # Swing must be below 70 (not overbought)
 
 # MACD Settings
 MACD_FAST = 12
@@ -72,15 +127,16 @@ MACD_SIGNAL = 9
 BB_PERIOD = 20
 BB_STD = 2
 
-# ADX Settings - Trend strength thresholds
+# ADX Settings - SWING needs explosive trend strength
 ADX_PERIOD = 14
-ADX_MIN_TREND = 30       # Minimum for swing trades (STRICT - strong trend required)
+ADX_MIN_TREND = 35       # Minimum for swing (VERY STRONG - 5-day profit needs explosive moves)
 ADX_STRONG_TREND = 25    # Strong trend (good for positional)
 ADX_VERY_STRONG = 50     # Very strong trend (rare)
 
-# Volume Settings
+# Volume Settings - SWING needs strong buying pressure
 VOLUME_MA_PERIOD = 20
-VOLUME_SURGE_MULTIPLIER = 1.5
+VOLUME_SURGE_MULTIPLIER = 2.0  # Swing needs 2x volume (fast-moving stocks)
+VOLUME_SWING_MULTIPLIER = 2.0   # Minimum 2x volume for swing trades
 
 # ═══════════════════════════════════════════════════════════════
 # 🔬 ADVANCED MATHEMATICAL INDICATORS
@@ -118,9 +174,9 @@ ML_FEATURES = [
 # 🎯 SIGNAL GENERATION
 # ═══════════════════════════════════════════════════════════════
 
-# Scoring System (0-10) - STRICT for swing, BALANCED for positional
-MIN_SIGNAL_SCORE = 7.0  # Minimum score for positional (BALANCED - good quality)
-MIN_SWING_SIGNAL_SCORE = 8.0  # Minimum score for swing (STRICT - only best setups)
+# Scoring System (0-10)
+MIN_SIGNAL_SCORE = 7.0  # Positional: Good quality (balanced - allows MR + Momentum)
+MIN_SWING_SIGNAL_SCORE = 8.5  # Swing: A+ ONLY (STRICT - explosive momentum only)
 HIGH_QUALITY_SCORE = 8.5  # High quality signal threshold (for auto-replacement)
 
 # Signal Filtering (Prevent signal flood)
@@ -139,6 +195,7 @@ BREAKOUT_CAPITAL_PCT = 0.10  # 10% capital for breakout (rare but valuable)
 # Exit weak positions (losing/low-profit) to free capital for high-quality new signals
 AUTO_EXIT_WEAK_FOR_QUALITY = True  # Exit weakest position for high-quality signals
 QUALITY_REPLACEMENT_THRESHOLD = 8.5  # Only replace if new signal score >= 8.5
+QUALITY_REPLACEMENT_THRESHOLD_BREAKOUT = 8.0  # Lower for breakouts (rare but powerful)
 MIN_SCORE_DIFFERENCE = 0.5  # New signal must be at least 0.5 points better than weakest
 
 # Signal Weights
@@ -157,14 +214,14 @@ SIGNAL_PRICE_MOVE_THRESHOLD = 0.01  # Reject if price moved >1% since signal
 # 📈 STRATEGY SETTINGS
 # ═══════════════════════════════════════════════════════════════
 
-# Swing Trading (3-7 days) - STRICT quality only (30% capital)
+# Swing Trading (3-7 days) - FAST PROFIT in 5 days, 2 days buffer (30% capital)
 SWING_HOLD_DAYS_MIN = 3
-SWING_HOLD_DAYS_MAX = 7  # Exit after 7 days max
-SWING_ENABLED = True  # ENABLED - STRICT criteria, only top-tier swing setups (score >= 8.0, ADX >= 30)
+SWING_HOLD_DAYS_MAX = 7  # Exit after 7 days max (target 5 days for profit)
+SWING_ENABLED = True  # ENABLED - ULTRA STRICT: score ≥8.5, ADX ≥35, RSI 50-70, Volume 2x
 
 # Positional Trading (INTERMEDIATE) - High quality setups, faster exits
 POSITIONAL_HOLD_DAYS_MIN = 5  # Minimum 5 days (was 10)
-POSITIONAL_HOLD_DAYS_MAX = 15  # Maximum 15 days
+POSITIONAL_HOLD_DAYS_MAX = 15  # Maximum 15 days - FAST PROFIT TAKING
 POSITIONAL_ENABLED = True
 
 # ═══════════════════════════════════════════════════════════════

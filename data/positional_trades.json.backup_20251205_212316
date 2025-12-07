@@ -1,0 +1,50 @@
+[
+  {
+    "symbol": "INDIGO.NS",
+    "entry_price": 5906.0,
+    "exit_price": 5662.5,
+    "shares": 1,
+    "entry_date": "2025-12-01T04:52:01.879287",
+    "exit_date": "2025-12-03T05:09:23.076534",
+    "pnl": -243.5,
+    "pnl_percent": -4.122925838130715,
+    "reason": "STOP_LOSS",
+    "trade_type": "\ud83d\udcc8 POSITIONAL TRADE"
+  },
+  {
+    "symbol": "LTTS.NS",
+    "entry_price": 4445.7,
+    "exit_price": 4682.89990234375,
+    "shares": 2,
+    "entry_date": "2025-12-01T04:52:01.441582",
+    "exit_date": "2025-12-04T05:59:43.277997",
+    "pnl": 474.39980468750036,
+    "pnl_percent": 5.335490526660598,
+    "reason": "TARGET_1",
+    "trade_type": "\ud83d\udcc8 POSITIONAL TRADE"
+  },
+  {
+    "symbol": "WELSPUNLIV.NS",
+    "entry_price": 141.36,
+    "exit_price": 135.16000366210938,
+    "shares": 3,
+    "entry_date": "2025-12-03T05:42:50.807593",
+    "exit_date": "2025-12-05T04:55:42.354540",
+    "pnl": -18.599989013671916,
+    "pnl_percent": -4.385962321654384,
+    "reason": "STOP_LOSS",
+    "trade_type": "\ud83d\udcc8 POSITIONAL TRADE"
+  },
+  {
+    "symbol": "AEGISVOPAK.NS",
+    "entry_price": 271.85,
+    "exit_price": 260.95001220703125,
+    "shares": 34,
+    "entry_date": "2025-12-04T06:16:30.625832",
+    "exit_date": "2025-12-05T06:02:58.677237",
+    "pnl": -370.59958496093896,
+    "pnl_percent": -4.009559607492651,
+    "reason": "STOP_LOSS",
+    "trade_type": "\ud83d\udcc8 POSITIONAL TRADE"
+  }
+]

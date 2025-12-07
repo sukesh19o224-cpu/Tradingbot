@@ -8,7 +8,10 @@ import numpy as np
 from typing import Dict, Optional, Tuple
 from datetime import datetime
 
-from config.settings import SWING_STOP_LOSS, POSITIONAL_STOP_LOSS
+from config.settings import (
+    SWING_MEAN_REVERSION_STOP, SWING_MOMENTUM_STOP, SWING_BREAKOUT_STOP,
+    POSITIONAL_MEAN_REVERSION_STOP, POSITIONAL_MOMENTUM_STOP, POSITIONAL_BREAKOUT_STOP
+)
 
 
 class HybridDetector:

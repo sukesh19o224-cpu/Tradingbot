@@ -1,0 +1,110 @@
+[
+  {
+    "symbol": "ANURAS.NS",
+    "entry_price": 1210.5,
+    "exit_price": 1242.800048828125,
+    "shares": 1,
+    "entry_date": "2025-12-01T05:25:33.330924",
+    "exit_date": "2025-12-01T09:22:42.645979",
+    "pnl": 32.300048828125,
+    "pnl_percent": 2.668322910212722,
+    "reason": "TARGET_1",
+    "trade_type": "\ud83d\udd25 SWING TRADE"
+  },
+  {
+    "symbol": "APARINDS.NS",
+    "entry_price": 9164.0,
+    "exit_price": 8837.5,
+    "shares": 1,
+    "entry_date": "2025-12-01T05:08:46.738680",
+    "exit_date": "2025-12-02T08:28:13.700388",
+    "pnl": -326.5,
+    "pnl_percent": -3.5628546486250543,
+    "reason": "STOP_LOSS",
+    "trade_type": "\ud83d\udd25 SWING TRADE"
+  },
+  {
+    "symbol": "BELRISE.NS",
+    "entry_price": 166.11,
+    "exit_price": 170.5,
+    "shares": 23,
+    "entry_date": "2025-12-01T04:52:00.290850",
+    "exit_date": "2025-12-02T08:45:07.923468",
+    "pnl": 100.9699999999998,
+    "pnl_percent": 2.642827042321345,
+    "reason": "TARGET_1",
+    "trade_type": "\ud83d\udd25 SWING TRADE"
+  },
+  {
+    "symbol": "ANURAS.NS",
+    "entry_price": 1210.5,
+    "exit_price": 1206.0,
+    "shares": 5,
+    "entry_date": "2025-12-01T05:25:33.330924",
+    "exit_date": "2025-12-02T10:27:29.280084",
+    "pnl": -22.5,
+    "pnl_percent": -0.37174721189591076,
+    "reason": "STOP_LOSS",
+    "trade_type": "\ud83d\udd25 SWING TRADE"
+  },
+  {
+    "symbol": "PGEL.NS",
+    "entry_price": 591.55,
+    "exit_price": 570.5,
+    "shares": 24,
+    "entry_date": "2025-12-01T05:25:32.919693",
+    "exit_date": "2025-12-03T09:13:54.386383",
+    "pnl": -505.1999999999989,
+    "pnl_percent": -3.5584481447045824,
+    "reason": "STOP_LOSS",
+    "trade_type": "\ud83d\udd25 SWING TRADE"
+  },
+  {
+    "symbol": "BELRISE.NS",
+    "entry_price": 166.11,
+    "exit_price": 164.07000732421875,
+    "shares": 69,
+    "entry_date": "2025-12-01T04:52:00.290850",
+    "exit_date": "2025-12-04T04:52:25.057445",
+    "pnl": -140.7594946289064,
+    "pnl_percent": -1.2280974509549476,
+    "reason": "STOP_LOSS",
+    "trade_type": "\ud83d\udd25 SWING TRADE"
+  },
+  {
+    "symbol": "INFY.NS",
+    "entry_price": 1561.2,
+    "exit_price": 1605.0,
+    "shares": 2,
+    "entry_date": "2025-12-01T04:52:00.610750",
+    "exit_date": "2025-12-05T04:55:41.001252",
+    "pnl": 87.59999999999991,
+    "pnl_percent": 2.805534204458106,
+    "reason": "TARGET_1",
+    "trade_type": "\ud83d\udd25 SWING TRADE"
+  },
+  {
+    "symbol": "TBOTEK.NS",
+    "entry_price": 1688.8,
+    "exit_price": 1616.0999755859375,
+    "shares": 3,
+    "entry_date": "2025-12-03T05:09:21.226997",
+    "exit_date": "2025-12-05T06:08:00.052864",
+    "pnl": -218.10007324218714,
+    "pnl_percent": -4.304833278899956,
+    "reason": "STOP_LOSS",
+    "trade_type": "\ud83d\udd25 SWING TRADE"
+  },
+  {
+    "symbol": "M&MFIN.NS",
+    "entry_price": 354.1,
+    "exit_price": 363.1000061035156,
+    "shares": 7,
+    "entry_date": "2025-12-03T09:30:56.157919",
+    "exit_date": "2025-12-05T06:36:39.679384",
+    "pnl": 63.0000427246091,
+    "pnl_percent": 2.541656623415872,
+    "reason": "TARGET_1",
+    "trade_type": "\ud83d\udd25 SWING TRADE"
+  }
+]

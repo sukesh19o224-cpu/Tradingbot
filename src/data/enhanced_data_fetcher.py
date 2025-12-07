@@ -1,11 +1,11 @@
 """
 🚀 ENHANCED DATA FETCHER - Perfect Data for Analysis
-Fetches BOTH daily (90 days) AND 15-minute (1 day) data for each stock
+Fetches BOTH daily (75 days) AND 15-minute (1 day) data for each stock
 
 This is THE KEY to making the system work properly!
 
 Data Strategy:
-- Daily: 3 months (90 days) - Enough for all technical indicators
+- Daily: 75 days (~52 trading days) - Optimal for 50-day MA + positional trading
 - Intraday: 1 day (15-min candles) - Most reliable with yfinance
 """
 
@@ -27,7 +27,7 @@ class EnhancedDataFetcher:
     Enhanced Data Fetcher with DUAL data streams
 
     For each stock, fetches:
-    1. 90 days (3mo) of DAILY candles (for trend analysis, moving averages, etc.)
+    1. 75 days (~52 trading days) of DAILY candles (for trend analysis, moving averages, etc.)
     2. 1 day of 15-MINUTE candles (for current intraday signals)
 
     Both datasets are properly normalized and ready for analysis.
@@ -42,7 +42,7 @@ class EnhancedDataFetcher:
             api_delay: Delay in seconds between API calls (0.3s = safe)
         """
         self.api_delay = api_delay
-        self.daily_period = '3mo'  # 90 days daily data (reliable)
+        self.daily_period = '75d'  # 75 days daily data (~52 trading days, enough for 50-MA)
         self.intraday_period = '1d'  # 1 day 15-min data (most reliable)
         self.stats = {
             'total_attempts': 0,
@@ -76,7 +76,7 @@ class EnhancedDataFetcher:
         }
 
         try:
-            # STEP 1: Fetch 3 months DAILY data (CRITICAL!)
+            # STEP 1: Fetch 75 days DAILY data (CRITICAL!)
             daily_df = self._fetch_daily_data(symbol)
 
             if daily_df is not None and not daily_df.empty and len(daily_df) >= 30:

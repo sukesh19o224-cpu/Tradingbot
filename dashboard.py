@@ -108,13 +108,13 @@ def display_portfolio_summary(data, current_prices):
     positional = data.get('positional', {})
 
     # Get initial capital from saved data
-    swing_initial = swing.get('initial_capital', 60000)
-    positional_initial = positional.get('initial_capital', 40000)
+    swing_initial = swing.get('initial_capital', 15000)
+    positional_initial = positional.get('initial_capital', 35000)
     total_initial = swing_initial + positional_initial
 
     # Get current cash
-    swing_capital = swing.get('capital', 60000)
-    positional_capital = positional.get('capital', 40000)
+    swing_capital = swing.get('capital', 15000)
+    positional_capital = positional.get('capital', 35000)
     total_cash = swing_capital + positional_capital
 
     swing_positions = swing.get('positions', {})
@@ -159,64 +159,122 @@ def display_portfolio_summary(data, current_prices):
 
     st.markdown("---")
 
-    # Main Summary Metrics
-    st.subheader("📊 PORTFOLIO OVERVIEW")
-    col1, col2, col3, col4, col5 = st.columns(5)
+    # ========================================
+    # SWING PORTFOLIO SECTION
+    # ========================================
+    st.header("🔥 SWING PORTFOLIO (30% Capital)")
+    
+    swing_pnl = swing_portfolio_value - swing_initial
+    swing_pnl_pct = (swing_pnl / swing_initial * 100) if swing_initial > 0 else 0
+    
+    # Get swing trade stats
+    swing_trades = data.get('swing_trades', [])
+    swing_total_trades = len(swing_trades)
+    swing_wins = len([t for t in swing_trades if t.get('pnl', 0) > 0])
+    swing_losses = len([t for t in swing_trades if t.get('pnl', 0) < 0])
+    swing_win_rate = (swing_wins / swing_total_trades * 100) if swing_total_trades > 0 else 0
+    swing_realized_pnl = sum(t.get('pnl', 0) for t in swing_trades)
+    swing_unrealized_pnl = swing_current_value - swing_invested
 
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    
     with col1:
-        st.metric("💰 Initial Capital", f"₹{total_initial:,.0f}")
-
+        st.metric("💰 Initial", f"₹{swing_initial:,.0f}")
+    
     with col2:
-        # Normal delta coloring: green for profit, red for loss
-        st.metric("📈 Current Value", f"₹{total_portfolio_value:,.0f}",
-                 delta=f"₹{total_pnl:+,.0f}")
-        # Note: st.metric automatically shows green↑ for positive, red↓ for negative
-
+        st.metric("📊 Current Value", f"₹{swing_portfolio_value:,.0f}",
+                 delta=f"₹{swing_pnl:+,.0f}")
+    
     with col3:
-        pnl_color = "positive" if total_pnl >= 0 else "negative"
+        pnl_color = "positive" if swing_pnl >= 0 else "negative"
         st.markdown(f"**Total P&L**")
-        st.markdown(f"<span class='{pnl_color} big-metric'>₹{total_pnl:+,.0f} ({total_pnl_pct:+.2f}%)</span>",
+        st.markdown(f"<span class='{pnl_color} big-metric'>{swing_pnl_pct:+.2f}%</span>",
                    unsafe_allow_html=True)
-
+    
     with col4:
-        st.metric("💵 Available Cash", f"₹{total_cash:,.0f}")
-
+        st.metric("💵 Cash", f"₹{swing_capital:,.0f}")
+        st.metric("📈 Invested", f"₹{swing_invested:,.0f}")
+    
     with col5:
-        total_positions = len(swing_positions) + len(positional_positions)
-        st.metric("📊 Open Positions", total_positions)
+        st.metric("📊 Positions", len(swing_positions))
+        realized_color = "positive" if swing_realized_pnl >= 0 else "negative"
+        st.markdown(f"**Realized P&L**")
+        st.markdown(f"<span class='{realized_color}'>₹{swing_realized_pnl:+,.0f}</span>",
+                   unsafe_allow_html=True)
+    
+    with col6:
+        st.metric("📝 Total Trades", swing_total_trades)
+        st.metric("✅ Win Rate", f"{swing_win_rate:.1f}%")
 
     st.markdown("---")
 
-    # Detailed Breakdown
-    col1, col2 = st.columns(2)
+    # ========================================
+    # POSITIONAL PORTFOLIO SECTION
+    # ========================================
+    st.header("📈 POSITIONAL PORTFOLIO (70% Capital)")
+    
+    positional_pnl = positional_portfolio_value - positional_initial
+    positional_pnl_pct = (positional_pnl / positional_initial * 100) if positional_initial > 0 else 0
+    
+    # Get positional trade stats
+    positional_trades = data.get('positional_trades', [])
+    positional_total_trades = len(positional_trades)
+    positional_wins = len([t for t in positional_trades if t.get('pnl', 0) > 0])
+    positional_losses = len([t for t in positional_trades if t.get('pnl', 0) < 0])
+    positional_win_rate = (positional_wins / positional_total_trades * 100) if positional_total_trades > 0 else 0
+    positional_realized_pnl = sum(t.get('pnl', 0) for t in positional_trades)
+    positional_unrealized_pnl = positional_current_value - positional_invested
 
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    
     with col1:
-        st.subheader("🔥 SWING PORTFOLIO")
-        swing_pnl = swing_portfolio_value - swing_initial
-        swing_pnl_pct = (swing_pnl / swing_initial * 100) if swing_initial > 0 else 0
-        pnl_color = "positive" if swing_pnl >= 0 else "negative"
-
-        st.write(f"**Initial:** ₹{swing_initial:,.0f}")
-        st.write(f"**Current Value:** ₹{swing_portfolio_value:,.0f}")
-        st.markdown(f"**P&L:** <span class='{pnl_color}'>₹{swing_pnl:+,.0f} ({swing_pnl_pct:+.2f}%)</span>",
-                   unsafe_allow_html=True)
-        st.write(f"**Cash:** ₹{swing_capital:,.0f}")
-        st.write(f"**Invested:** ₹{swing_invested:,.0f}")
-        st.write(f"**Positions:** {len(swing_positions)}")
-
+        st.metric("💰 Initial", f"₹{positional_initial:,.0f}")
+    
     with col2:
-        st.subheader("📈 POSITIONAL PORTFOLIO")
-        positional_pnl = positional_portfolio_value - positional_initial
-        positional_pnl_pct = (positional_pnl / positional_initial * 100) if positional_initial > 0 else 0
+        st.metric("📊 Current Value", f"₹{positional_portfolio_value:,.0f}",
+                 delta=f"₹{positional_pnl:+,.0f}")
+    
+    with col3:
         pnl_color = "positive" if positional_pnl >= 0 else "negative"
-
-        st.write(f"**Initial:** ₹{positional_initial:,.0f}")
-        st.write(f"**Current Value:** ₹{positional_portfolio_value:,.0f}")
-        st.markdown(f"**P&L:** <span class='{pnl_color}'>₹{positional_pnl:+,.0f} ({positional_pnl_pct:+.2f}%)</span>",
+        st.markdown(f"**Total P&L**")
+        st.markdown(f"<span class='{pnl_color} big-metric'>{positional_pnl_pct:+.2f}%</span>",
                    unsafe_allow_html=True)
-        st.write(f"**Cash:** ₹{positional_capital:,.0f}")
-        st.write(f"**Invested:** ₹{positional_invested:,.0f}")
-        st.write(f"**Positions:** {len(positional_positions)}")
+    
+    with col4:
+        st.metric("💵 Cash", f"₹{positional_capital:,.0f}")
+        st.metric("📈 Invested", f"₹{positional_invested:,.0f}")
+    
+    with col5:
+        st.metric("📊 Positions", len(positional_positions))
+        realized_color = "positive" if positional_realized_pnl >= 0 else "negative"
+        st.markdown(f"**Realized P&L**")
+        st.markdown(f"<span class='{realized_color}'>₹{positional_realized_pnl:+,.0f}</span>",
+                   unsafe_allow_html=True)
+    
+    with col6:
+        st.metric("📝 Total Trades", positional_total_trades)
+        st.metric("✅ Win Rate", f"{positional_win_rate:.1f}%")
+
+    st.markdown("---")
+    
+    # Combined Quick Summary
+    st.subheader("📊 COMBINED SUMMARY")
+    total_positions = len(swing_positions) + len(positional_positions)
+    total_pnl = total_portfolio_value - total_initial
+    total_pnl_pct = (total_pnl / total_initial * 100) if total_initial > 0 else 0
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("💰 Total Capital", f"₹{total_initial:,.0f}")
+    with col2:
+        st.metric("📊 Total Value", f"₹{total_portfolio_value:,.0f}")
+    with col3:
+        pnl_color = "positive" if total_pnl >= 0 else "negative"
+        st.markdown(f"**Combined P&L**")
+        st.markdown(f"<span class='{pnl_color}'>₹{total_pnl:+,.0f} ({total_pnl_pct:+.2f}%)</span>",
+                   unsafe_allow_html=True)
+    with col4:
+        st.metric("📊 Total Positions", total_positions)
 
 def display_open_positions(data, current_prices):
     """Display open positions with live P&L and detailed metrics"""
@@ -354,11 +412,11 @@ def display_open_positions(data, current_prices):
             except:
                 hold_days = 0
 
-            # OVERRIDE: Use correct max days based on strategy (positional = 30 days)
+            # OVERRIDE: Use correct max days based on strategy (positional = 15 days)
             # This fixes old positions that have incorrect max_holding_days
             strategy = pos.get('strategy', 'positional')
             if strategy == 'positional':
-                max_hold_days = 30  # Positional trades should be 30 trading days
+                max_hold_days = 15  # Positional trades should be 15 trading days (matches settings.py)
             else:
                 max_hold_days = pos.get('max_holding_days', 45)
 

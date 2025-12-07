@@ -82,25 +82,55 @@ class SignalGenerator:
             )
 
             # 6. Calculate Entry, Targets, and Stop Loss
+            # Use strategy-specific config based on signal type (MEAN_REVERSION, MOMENTUM, BREAKOUT)
+            from config.settings import MEAN_REVERSION_CONFIG, MOMENTUM_CONFIG, BREAKOUT_CONFIG
+            
             current_price = technical_result['price']
             entry_price = current_price
+            
+            # Get signal type from technical analysis (MEAN_REVERSION, MOMENTUM, or BREAKOUT)
+            signal_classification = technical_result.get('signal_type', 'MOMENTUM')
 
             if trade_type == 'SWING':
-                targets = self._calculate_targets(entry_price, SWING_TARGETS)
-                stop_loss = entry_price * (1 - SWING_STOP_LOSS)
+                # SWING: Use config values (NO HARDCODED DUPLICATES)
+                if signal_classification == 'MEAN_REVERSION':
+                    # Mean reversion swing: Use config stop loss
+                    targets = self._calculate_targets(entry_price, [0.04, 0.07, 0.10])
+                    stop_loss = entry_price * (1 - SWING_STOP_LOSS)  # From config
+                elif signal_classification == 'BREAKOUT':
+                    # Breakout swing: Use config stop loss
+                    targets = self._calculate_targets(entry_price, [0.05, 0.08, 0.12])
+                    stop_loss = entry_price * (1 - SWING_STOP_LOSS)  # From config
+                else:  # MOMENTUM
+                    # Momentum swing: Use config stop loss
+                    targets = self._calculate_targets(entry_price, [0.04, 0.07, 0.10])
+                    stop_loss = entry_price * (1 - SWING_STOP_LOSS)  # From config
                 hold_days = (SWING_HOLD_DAYS_MIN + SWING_HOLD_DAYS_MAX) // 2
             else:  # POSITIONAL
-                targets = self._calculate_targets(entry_price, POSITIONAL_TARGETS)
-                stop_loss = entry_price * (1 - POSITIONAL_STOP_LOSS)
-                hold_days = (POSITIONAL_HOLD_DAYS_MIN + POSITIONAL_HOLD_DAYS_MAX) // 2
+                # For positional trades, use strategy-specific config
+                if signal_classification == 'MEAN_REVERSION':
+                    strategy_config = MEAN_REVERSION_CONFIG
+                elif signal_classification == 'BREAKOUT':
+                    strategy_config = BREAKOUT_CONFIG
+                else:  # MOMENTUM or default
+                    strategy_config = MOMENTUM_CONFIG
+                
+                targets = self._calculate_targets(entry_price, strategy_config['TARGETS'])
+                stop_loss = entry_price * (1 - strategy_config['STOP_LOSS'])
+                hold_days = POSITIONAL_HOLD_DAYS_MAX  # Use max days for faster exits (15 days)
 
             # 7. Build complete signal
+            # Include strategy classification (MEAN_REVERSION, MOMENTUM, BREAKOUT)
+            mean_reversion_quality = technical_result.get('mean_reversion_quality', {})
+            momentum_quality = technical_result.get('momentum_quality', {})
+            
             signal = {
                 'symbol': symbol,
                 'timestamp': datetime.now().isoformat(),
-                'signal_type': 'BUY' if signal_score >= MIN_SIGNAL_SCORE else 'WATCH',
+                'signal_type': signal_classification,  # MEAN_REVERSION, MOMENTUM, or BREAKOUT
                 'trade_type': trade_type,
                 'score': round(signal_score, 2),
+                'strategy': 'swing' if trade_type == 'SWING' else 'positional',
 
                 # Price & Targets
                 'current_price': round(current_price, 2),
@@ -109,6 +139,12 @@ class SignalGenerator:
                 'target2': round(targets[1], 2),
                 'target3': round(targets[2], 2),
                 'stop_loss': round(stop_loss, 2),
+
+                # Strategy Quality (for filtering weak setups)
+                'mean_reversion_valid': mean_reversion_quality.get('is_valid', True),
+                'mean_reversion_score': mean_reversion_quality.get('score', 0),
+                'momentum_valid': momentum_quality.get('is_valid', True),
+                'momentum_score': momentum_quality.get('score', 0),
 
                 # Technical Analysis
                 'technical_score': technical_result['signals']['technical_score'],
@@ -143,13 +179,24 @@ class SignalGenerator:
             }
 
             # Only return signal if score meets minimum threshold
-            # STRICT: Swing requires higher score (8.0), Positional requires 7.0
+            # ULTRA STRICT: Swing requires 8.5+, Positional requires 7.0
             min_required_score = MIN_SWING_SIGNAL_SCORE if trade_type == 'SWING' else MIN_SIGNAL_SCORE
 
-            if signal_score >= min_required_score:
-                return signal
-            else:
+            if signal_score < min_required_score:
                 return None  # Score too low for this trade type
+            
+            # ADDITIONAL SWING VALIDATION: Double-check 5-day profit criteria
+            if trade_type == 'SWING':
+                rsi = signal.get('rsi', 0)
+                adx = signal.get('adx', 0)
+                volume_ratio = signal.get('volume_ratio', 1.0)
+                
+                # Must meet ALL swing criteria for 5-day profit potential
+                if not (50 <= rsi <= 70 and adx >= 35 and volume_ratio >= 2.0):
+                    print(f"   ⚠️ {symbol}: Swing rejected (RSI:{rsi:.1f}, ADX:{adx:.1f}, Vol:{volume_ratio:.1f}x)")
+                    return None
+            
+            return signal
 
         except Exception as e:
             print(f"❌ Signal generation error for {symbol}: {e}")
@@ -205,15 +252,35 @@ class SignalGenerator:
         Determine if this should be a SWING or POSITIONAL trade
 
         Criteria:
-        - SWING: Short-term momentum, RSI signals, short-term patterns
+        - SWING (5-day profit): RSI 50-70, ADX ≥35, Volume ≥2x, Strong momentum
         - POSITIONAL: Strong trends, Elliott Wave impulse, long-term momentum
         """
         try:
-            # Indicators favoring POSITIONAL
+            # SWING QUALIFICATION (ULTRA STRICT - 5-day profit potential)
+            rsi = technical.get('rsi', 0)
+            adx = technical.get('adx', 0)
+            volume_ratio = technical.get('volume_ratio', 1.0)
+            
+            # SWING must meet ALL these criteria for 5-day profit:
+            # 1. RSI 50-70: Strong momentum but not overbought
+            # 2. ADX ≥35: Explosive trend strength
+            # 3. Volume ≥2x: Strong buying pressure
+            # 4. MACD bullish crossover: Recent momentum shift
+            swing_qualified = (
+                50 <= rsi <= 70 and
+                adx >= 35 and
+                volume_ratio >= 2.0 and
+                technical.get('signals', {}).get('macd_signal') == 'BULLISH'
+            )
+            
+            if swing_qualified and SWING_ENABLED:
+                return 'SWING'
+            
+            # Otherwise, check for POSITIONAL
             positional_score = 0
 
             # 1. Strong ADX indicates trend following (positional)
-            if technical.get('adx', 0) > 30:
+            if adx > 25:
                 positional_score += 2
 
             # 2. Price above long-term EMA

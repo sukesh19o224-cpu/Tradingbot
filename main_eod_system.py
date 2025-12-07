@@ -42,8 +42,8 @@ class EODIntradaySystem:
         # Sequential scanner (NO threads!)
         self.scanner = SequentialScanner(api_delay=0.3)
 
-        # Dual portfolio
-        self.dual_portfolio = DualPortfolio(total_capital=INITIAL_CAPITAL)
+        # Dual portfolio (uses settings values: INITIAL_CAPITAL=50K, SWING_CAPITAL=25K)
+        self.dual_portfolio = DualPortfolio()
 
         # Discord alerts
         self.discord = DiscordAlerts()
@@ -62,7 +62,7 @@ class EODIntradaySystem:
         print(f"🐌 Sequential Scanning: ONE BY ONE (safe, no threads)")
         print(f"⏱️ API Delay: 0.3s between stocks")
         print(f"⏰ Scan Interval: Every {SCAN_INTERVAL_MINUTES} minutes")
-        print(f"💼 Dual Portfolio: Swing (60%) + Positional (40%)")
+        print(f"💼 Dual Portfolio: Positional (70%) + Swing (30%)")
         print(f"📱 Discord: {'Enabled' if self.discord.enabled else 'Disabled'}")
         print("=" * 70)
 
@@ -181,8 +181,47 @@ class EODIntradaySystem:
         print(f"   📈 Positional: {len(positional_signals)}")
 
         # Process swing signals
-        for signal in swing_signals:
+        print(f"\n{'='*70}")
+        print(f"🌊 PROCESSING {len(swing_signals)} SWING SIGNALS")
+        print(f"{'='*70}\n")
+        
+        for i, signal in enumerate(swing_signals, 1):
             symbol = signal['symbol']
+            signal_type = signal.get('signal_type', 'SWING')
+            score = signal.get('score', 0)
+            
+            print(f"{i}. {symbol} - {signal_type} (Score: {score:.1f}/10)")
+
+            # IMPROVED: Check quality for swing trades too (but less strict than positional)
+            if signal_type == 'MEAN_REVERSION':
+                mean_rev_score = signal.get('mean_reversion_score', 0)
+                is_valid = signal.get('mean_reversion_valid', False)
+                
+                print(f"   📊 Mean Reversion Quality: {mean_rev_score}/100")
+                
+                # Swing: Accept score >= 30 (very relaxed for mean reversion)
+                if mean_rev_score < 30:
+                    print(f"   ❌ REJECTED - Weak mean reversion (need ≥30 for swing)")
+                    print()
+                    continue
+                else:
+                    print(f"   ✅ PASSED - Good mean reversion swing")
+            
+            elif signal_type == 'MOMENTUM':
+                momentum_score = signal.get('momentum_score', 0)
+                is_valid = signal.get('momentum_valid', False)
+                
+                print(f"   📊 Momentum Quality: {momentum_score}/100")
+                
+                # Swing: Accept score >= 40 (less strict than positional 50)
+                if momentum_score < 40:
+                    print(f"   ❌ REJECTED - Weak momentum (need ≥40 for swing)")
+                    print()
+                    continue
+                else:
+                    print(f"   ✅ PASSED - Good momentum swing")
+            else:
+                print(f"   ✅ BREAKOUT signal (no quality filter)")
 
             # Validate signal freshness
             is_valid, reason = self.signal_validator.validate_signal_freshness(
@@ -190,7 +229,8 @@ class EODIntradaySystem:
             )
 
             if not is_valid:
-                print(f"   ⏭️ {symbol}: Skipped ({reason})")
+                print(f"   ❌ REJECTED - {reason}")
+                print()
                 continue
 
             if PAPER_TRADING_AUTO_EXECUTE:
@@ -200,13 +240,52 @@ class EODIntradaySystem:
                     # Send Discord alert
                     if self.discord.enabled:
                         self.discord.send_swing_signal(signal)
-                    print(f"   🔥 {symbol}: Swing trade executed")
+                    print(f"   🔥 Swing trade executed")
+                    print()
                 else:
-                    print(f"   ⏭️ {symbol}: Skipped (already holding or insufficient capital)")
+                    print(f"   ⏭️ Skipped (already holding or insufficient capital)")
+                    print()
 
         # Process positional signals
-        for signal in positional_signals:
+        print(f"\n{'='*70}")
+        print(f"📊 PROCESSING {len(positional_signals)} POSITIONAL SIGNALS")
+        print(f"{'='*70}\n")
+        
+        for i, signal in enumerate(positional_signals, 1):
             symbol = signal['symbol']
+            signal_type = signal.get('signal_type', 'MOMENTUM')
+            score = signal.get('score', 0)
+            
+            print(f"{i}. {symbol} - {signal_type} (Score: {score:.1f}/10)")
+
+            # Check quality filters based on signal type
+            if signal_type == 'MEAN_REVERSION':
+                mean_rev_score = signal.get('mean_reversion_score', 0)
+                is_valid = signal.get('mean_reversion_valid', False)
+                
+                print(f"   📊 Mean Reversion Quality: {mean_rev_score}/100")
+                
+                if not is_valid:
+                    print(f"   ❌ REJECTED - Weak mean reversion setup (need ≥40 score)")
+                    print()
+                    continue
+                else:
+                    print(f"   ✅ PASSED - Good mean reversion setup")
+            
+            elif signal_type == 'MOMENTUM':
+                momentum_score = signal.get('momentum_score', 0)
+                is_valid = signal.get('momentum_valid', False)
+                
+                print(f"   📊 Momentum Quality: {momentum_score}/100")
+                
+                if not is_valid:
+                    print(f"   ❌ REJECTED - Weak momentum setup (need ≥50 score)")
+                    print()
+                    continue
+                else:
+                    print(f"   ✅ PASSED - Good momentum setup")
+            else:
+                print(f"   ✅ BREAKOUT signal (no quality filter)")
 
             # Validate signal freshness
             is_valid, reason = self.signal_validator.validate_signal_freshness(
@@ -214,7 +293,8 @@ class EODIntradaySystem:
             )
 
             if not is_valid:
-                print(f"   ⏭️ {symbol}: Skipped ({reason})")
+                print(f"   ❌ REJECTED - {reason}")
+                print()
                 continue
 
             if PAPER_TRADING_AUTO_EXECUTE:
@@ -224,9 +304,11 @@ class EODIntradaySystem:
                     # Send Discord alert
                     if self.discord.enabled:
                         self.discord.send_positional_signal(signal)
-                    print(f"   📈 {symbol}: Positional trade executed")
+                    print(f"   📈 Positional trade executed")
+                    print()
                 else:
-                    print(f"   ⏭️ {symbol}: Skipped (already holding or insufficient capital)")
+                    print(f"   ⏭️ Skipped (already holding or insufficient capital)")
+                    print()
 
     def monitor_positions(self):
         """Monitor open positions and check for exits"""

@@ -9,25 +9,26 @@ from datetime import datetime
 from typing import Dict, List
 from src.paper_trading.paper_trader import PaperTrader
 import yfinance as yf
+from config.settings import INITIAL_CAPITAL, SWING_CAPITAL, MAX_POSITIONS, MAX_POSITIONS_SWING
 
 
 class DualPortfolio:
     """
     Manages two separate portfolios:
-    - Swing Trading Portfolio (30% capital) - STRICT quality only
-    - Positional Trading Portfolio (70% capital) - Main strategy
+    - Positional Trading Portfolio (₹50K) - Real money, balanced strategies
+    - Swing Trading Portfolio (₹25K) - Paper test, A+ only
     """
 
-    def __init__(self, total_capital: float = 100000):
+    def __init__(self, positional_capital: float = INITIAL_CAPITAL, swing_capital: float = SWING_CAPITAL):
         """
         Initialize dual portfolio system
 
         Args:
-            total_capital: Total capital to split between portfolios
+            positional_capital: Capital for positional portfolio (default: ₹50,000)
+            swing_capital: Capital for swing portfolio (default: ₹25,000)
         """
-        # Split capital: 30% swing (STRICT quality only), 70% positional (main strategy)
-        swing_capital = total_capital * 0.30
-        positional_capital = total_capital * 0.70
+        # Use FIXED allocations from settings (not percentages)
+        # This allows independent scaling of each portfolio
 
         # Create two separate portfolios
         self.swing_portfolio = PaperTrader(
@@ -42,12 +43,12 @@ class DualPortfolio:
             portfolio_file='data/positional_portfolio.json'
         )
 
-        self.total_initial_capital = total_capital
+        self.total_initial_capital = positional_capital + swing_capital
 
         print(f"💼 INTERMEDIATE Positional Strategy - Dual Portfolio Initialized:")
         print(f"   📈 Positional Portfolio (MAIN): ₹{positional_capital:,.0f} (70%) - 5-14 days, targets 5/10/15%")
         print(f"   🔥 Swing Portfolio (STRICT): ₹{swing_capital:,.0f} (30%) - Score ≥8.0, ADX ≥30")
-        print(f"   💰 Total Capital: ₹{total_capital:,.0f} • Max 7 positions per portfolio (₹10k each)")
+        print(f"   💰 Total Capital: ₹{self.total_initial_capital:,.0f} • Max {MAX_POSITIONS}/{MAX_POSITIONS_SWING} positions")
 
     def execute_swing_signal(self, signal: Dict) -> bool:
         """

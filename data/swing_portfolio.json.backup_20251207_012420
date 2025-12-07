@@ -1,0 +1,30 @@
+{
+  "capital": 12836.75,
+  "positions": {
+    "VTL.NS": {
+      "symbol": "VTL.NS",
+      "shares": 5,
+      "initial_shares": 5,
+      "entry_price": 432.65,
+      "entry_date": "2025-12-07T01:21:54.615306",
+      "trade_type": "\ud83d\udd25 SWING TRADE",
+      "target1": 449.96,
+      "target2": 462.94,
+      "target3": 475.91,
+      "stop_loss": 421.83,
+      "score": 7.2,
+      "cost": 2163.25,
+      "max_holding_days": 7,
+      "strategy": "swing",
+      "signal_type": "MEAN_REVERSION",
+      "t1_hit": false,
+      "t2_hit": false,
+      "t3_hit": false
+    }
+  },
+  "performance": {},
+  "start_date": "2025-12-07T01:14:08.660250",
+  "last_updated": "2025-12-07T01:21:54.615354",
+  "initial_capital": 15000.0,
+  "mode": "PAPER_TRADING"
+}

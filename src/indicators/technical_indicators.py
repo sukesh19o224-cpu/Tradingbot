@@ -59,6 +59,7 @@ class TechnicalIndicators:
             df = self._calculate_adx(df)
             df = self._calculate_volume_indicators(df)
             df = self._calculate_momentum(df)
+            df = self._calculate_relative_strength(df)  # RS vs Nifty 50
 
             # Get latest values
             latest = df.iloc[-1]
@@ -83,6 +84,7 @@ class TechnicalIndicators:
                 'adx': latest.get('ADX', 0),
                 'plus_di': latest.get('+DI', 0),
                 'minus_di': latest.get('-DI', 0),
+                'atr': latest.get('ATR', 0),  # Include ATR for stop loss calculation
                 'volume_ratio': latest.get('Volume_Ratio', 1.0),
                 'momentum_5d': latest.get('Momentum_5D', 0),
                 'momentum_20d': latest.get('Momentum_20D', 0),
@@ -135,7 +137,7 @@ class TechnicalIndicators:
         return df
 
     def _calculate_adx(self, df: pd.DataFrame, period: int = ADX_PERIOD) -> pd.DataFrame:
-        """Calculate ADX (Average Directional Index)"""
+        """Calculate ADX (Average Directional Index) and ATR"""
         high = df['High']
         low = df['Low']
         close = df['Close']
@@ -153,7 +155,9 @@ class TechnicalIndicators:
         tr3 = abs(low - close.shift())
         tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
 
+        # ATR (Average True Range) - Store for stop loss calculation
         atr = tr.rolling(window=period).mean()
+        df['ATR'] = atr
 
         # +DI and -DI
         df['+DI'] = 100 * (plus_dm.rolling(window=period).mean() / atr)
@@ -179,6 +183,34 @@ class TechnicalIndicators:
         """Calculate momentum indicators"""
         df['Momentum_5D'] = ((df['Close'] - df['Close'].shift(5)) / df['Close'].shift(5) * 100)
         df['Momentum_20D'] = ((df['Close'] - df['Close'].shift(20)) / df['Close'].shift(20) * 100)
+        return df
+
+    def _calculate_relative_strength(self, df: pd.DataFrame, benchmark_symbol: str = '^NSEI') -> pd.DataFrame:
+        """
+        Calculate Relative Strength (RS) vs benchmark (Nifty 50)
+        RS = (Stock % change / Index % change) * 100
+        RS > 100 = Outperforming, RS < 100 = Underperforming
+        """
+        try:
+            # Get benchmark data for same period
+            benchmark = yf.Ticker(benchmark_symbol)
+            bench_df = benchmark.history(start=df.index[0], end=df.index[-1])
+            
+            if not bench_df.empty and len(bench_df) >= 20:
+                # Calculate 20-day returns for stock
+                stock_return = df['Close'].pct_change(periods=20)
+                
+                # Calculate 20-day returns for benchmark
+                bench_return = bench_df['Close'].reindex(df.index, method='ffill').pct_change(periods=20)
+                
+                # RS Rating (100 = matching index)
+                df['RS_Rating'] = ((1 + stock_return) / (1 + bench_return) - 1) * 100 + 100
+                df['RS_Rating'] = df['RS_Rating'].fillna(100)  # Neutral if no data
+            else:
+                df['RS_Rating'] = 100  # Neutral if benchmark data unavailable
+        except Exception:
+            df['RS_Rating'] = 100  # Neutral on error
+        
         return df
 
     def _generate_signals(self, df: pd.DataFrame) -> Dict:

@@ -84,35 +84,111 @@ class SequentialScanner:
             data = self.data_fetcher.get_stock_data_dual(symbol)
 
             if not data['success'] or data['daily'] is None:
-                print(" ❌ No data", end='', flush=True)
+                print(" ❌ No data")
                 stats['data_failed'] += 1
                 stats['processed'] += 1
                 continue
 
             stats['data_success'] += 1
-            print(" ✅", end='', flush=True)
+            print(" ✅ Data fetched", end='', flush=True)
 
             # STEP 2: Analyze for signals
             try:
                 # Analyze daily data for swing + positional
                 signals = self._analyze_stock(symbol, data['daily'], data['intraday'])
 
-                # NO DUPLICATES: If qualifies for both, prioritize positional (longer-term)
-                if signals['positional']:
-                    # Positional takes priority
-                    positional_signals.append(signals['positional'])
-                    stats['positional_found'] += 1
-                    stats['qualified_stocks'].append({'symbol': symbol, 'type': 'positional'})
-                    print(" 📈 POSITIONAL", end='', flush=True)
-                elif signals['swing']:
-                    # Only add swing if NOT positional
-                    swing_signals.append(signals['swing'])
+                # Check what was found and show quality details
+                pos_sig = signals['positional']
+                swing_sig = signals['swing']
+                
+                results = []
+                
+                # Check swing quality (A+ ONLY: Score ≥8.5, Quality ≥70)
+                swing_passed = False
+                if swing_sig:
+                    swing_signal_type = swing_sig.get('signal_type', 'UNKNOWN')
+                    signal_score = swing_sig.get('score', 0)
+                    
+                    if swing_signal_type == 'MEAN_REVERSION':
+                        mean_rev_score = swing_sig.get('mean_reversion_score', 0)
+                        is_valid = swing_sig.get('mean_reversion_valid', False)
+                        swing_passed = is_valid  # Use quality validation (70+)
+                        status = f"Score:{signal_score:.1f}/10 Q:{mean_rev_score}/100"
+                        results.append(f"{'✅' if swing_passed else '❌'} SWING ({status})")
+                    elif swing_signal_type == 'MOMENTUM':
+                        momentum_score = swing_sig.get('momentum_score', 0)
+                        is_valid = swing_sig.get('momentum_valid', False)
+                        swing_passed = is_valid  # Use quality validation (70+)
+                        status = f"Score:{signal_score:.1f}/10 Q:{momentum_score}/100"
+                        results.append(f"{'✅' if swing_passed else '❌'} SWING ({status})")
+                    elif swing_signal_type == 'BREAKOUT':
+                        breakout_score = swing_sig.get('breakout_score', 0)
+                        is_valid = swing_sig.get('breakout_valid', False)
+                        swing_passed = is_valid  # Use quality validation (60+)
+                        status = f"Score:{signal_score:.1f}/10 Q:{breakout_score}/100"
+                        results.append(f"{'✅' if swing_passed else '❌'} SWING ({status})")
+                else:
+                    results.append("❌ Swing")
+                
+                if pos_sig:
+                    signal_type = pos_sig.get('signal_type', 'UNKNOWN')
+                    passed_quality = False
+                    
+                    # Show quality scores for positional
+                    if signal_type == 'MEAN_REVERSION':
+                        mean_rev_score = pos_sig.get('mean_reversion_score', 0)
+                        is_valid = pos_sig.get('mean_reversion_valid', False)
+                        signal_score = pos_sig.get('score', 0)
+                        reasons = pos_sig.get('mean_reversion_reasons', [])
+                        top_reason = reasons[0] if reasons else 'Quality filters'
+                        print(f"\n   📊 {signal_type} | Score: {signal_score:.1f}/10 | Quality: {mean_rev_score}/100 {'✅' if is_valid else '❌'}")
+                        print(f"      💡 {top_reason}", end='', flush=True)
+                        results.append(f"{'✅' if is_valid else '❌'} POSITIONAL")
+                        passed_quality = is_valid
+                    elif signal_type == 'MOMENTUM':
+                        momentum_score = pos_sig.get('momentum_score', 0)
+                        is_valid = pos_sig.get('momentum_valid', False)
+                        signal_score = pos_sig.get('score', 0)
+                        reasons = pos_sig.get('momentum_reasons', [])
+                        top_reason = reasons[0] if reasons else 'Quality filters'
+                        print(f"\n   📊 {signal_type} | Score: {signal_score:.1f}/10 | Quality: {momentum_score}/100 {'✅' if is_valid else '❌'}")
+                        print(f"      💡 {top_reason}", end='', flush=True)
+                        results.append(f"{'✅' if is_valid else '❌'} POSITIONAL")
+                        passed_quality = is_valid
+                    elif signal_type == 'BREAKOUT':
+                        breakout_score = pos_sig.get('breakout_score', 0)
+                        is_valid = pos_sig.get('breakout_valid', False)
+                        signal_score = pos_sig.get('score', 0)
+                        reasons = pos_sig.get('breakout_reasons', [])
+                        top_reason = reasons[0] if reasons else 'Quality filters'
+                        print(f"\n   📊 {signal_type} | Score: {signal_score:.1f}/10 | Quality: {breakout_score}/100 {'✅' if is_valid else '❌'}")
+                        print(f"      💡 {top_reason}", end='', flush=True)
+                        results.append(f"{'✅' if is_valid else '❌'} POSITIONAL")
+                        passed_quality = is_valid
+                    else:
+                        # Unknown signal type - skip
+                        print(f"\n   📊 {signal_type}", end='', flush=True)
+                        results.append("❌ POSITIONAL")
+                        passed_quality = False
+                    
+                    # Add to results ONLY if passed quality check
+                    if passed_quality:
+                        positional_signals.append(pos_sig)
+                        stats['positional_found'] += 1
+                        stats['qualified_stocks'].append({'symbol': symbol, 'type': 'positional'})
+                else:
+                    results.append("❌ Positional")
+                
+                # Add swing if passed quality AND no positional (no duplicates)
+                if swing_sig and swing_passed and not (pos_sig and passed_quality):
+                    swing_signals.append(swing_sig)
                     stats['swing_found'] += 1
                     stats['qualified_stocks'].append({'symbol': symbol, 'type': 'swing'})
-                    print(" 🔥 SWING", end='', flush=True)
+
+                print(f" | {' '.join(results)}", end='', flush=True)
 
             except Exception as e:
-                print(f" ⚠️ Analysis error", end='', flush=True)
+                print(f" ⚠️ Analysis error: {str(e)[:50]}", end='', flush=True)
 
             stats['processed'] += 1
 
@@ -210,41 +286,50 @@ class SequentialScanner:
     def _is_swing_setup(self, mtf_result: Dict) -> bool:
         """
         Check if stock qualifies for SWING trade
-
-        BALANCED criteria (60-70% win rate, ~5-10 signals per 100 stocks):
-        - RSI: 48-72 (tighter momentum zone)
-        - Score: ≥6.8 (slightly higher quality)
-        - ADX: ≥20 (confirmed trend strength)
-        - Uptrend: Required
-
-        Balanced thresholds for quality vs quantity
+        
+        STRICT FILTERS - A+ SETUPS ONLY (Paper trading test phase)
+        - MOMENTUM ONLY (no mean reversion for swing)
+        - ADX ≥28 (very strong trend required)
+        - RSI 62-68 (prime momentum zone, not extended)
+        - Volume ≥2.5x (explosive moves only)
+        - Quality Score ≥70/100 (A+ grade mandatory)
+        - Signal Score ≥8.5/10 (exceptional setups only)
         """
         try:
             indicators = mtf_result.get('indicators', {})
-
-            # RSI check - balanced range (48-72)
-            # 48: Clear upward momentum
-            # 72: Strong but not extreme
-            rsi = indicators.get('rsi', 0)
-            if rsi < 48 or rsi > 72:
+            signal_type = mtf_result.get('signal_type', 'MOMENTUM')
+            
+            # MOMENTUM ONLY - No mean reversion for swing
+            if signal_type != 'MOMENTUM':
                 return False
-
-            # ADX check - confirmed trend (20+)
-            # 20+: Clear trend exists
-            # Below 20: Weak/choppy (avoid)
+            
+            # VERY STRONG TREND - ADX ≥28 (explosive momentum required)
             adx = indicators.get('adx', 0)
-            if adx < 20:
+            if adx < 28:
                 return False
-
-            # Trend check (must be in uptrend)
+            
+            # PRIME MOMENTUM ZONE - RSI 62-68 (strong but not overbought)
+            rsi = indicators.get('rsi', 0)
+            if not (62 <= rsi <= 68):
+                return False
+            
+            # EXPLOSIVE VOLUME - Must be ≥2.5x average (institutional buying)
+            volume_ratio = indicators.get('volume_ratio', 0)
+            if volume_ratio < 2.5:
+                return False
+            
+            # QUALITY GRADE - Must be ≥70/100 (A+ setup)
+            quality_score = mtf_result.get('momentum_score', 0)
+            if quality_score < 70:
+                return False
+            
+            # Trend check (must be in strong uptrend)
             if not mtf_result.get('uptrend', False):
                 return False
 
-            # Signal strength - balanced (6.8+)
-            # 6.8: Higher quality filter
-            # Combines trend (40%) + technical (35%) + math (25%)
+            # SIGNAL STRENGTH - Must be ≥8.5/10 (exceptional only)
             signal_score = mtf_result.get('signal_score', 0)
-            if signal_score < 6.8:
+            if signal_score < 8.5:
                 return False
 
             return True
@@ -256,40 +341,40 @@ class SequentialScanner:
         """
         Check if stock qualifies for POSITIONAL trade
 
-        BALANCED criteria (60-70% win rate, ~5-10 signals per 100 stocks):
-        - ADX: ≥22 (stronger trend for longer holds)
-        - RSI: 45-68 (tighter healthy range)
+        IMPROVED: Strategy-aware filtering
+        - No hardcoded RSI limits (blocks mean reversion!)
+        - Quality scoring validates each signal type
+        - ADX: ≥18 for MEAN_REVERSION (lower during pullback), ≥22 for MOMENTUM
         - Score: ≥6.8 (slightly higher quality)
         - Uptrend: Required
-
-        Positional trades need stable quality trends
         """
         try:
             indicators = mtf_result.get('indicators', {})
+            signal_type = mtf_result.get('signal_type', 'MOMENTUM')
 
-            # ADX check - stronger trend (22+)
-            # 22+: Stable trend for longer holds
-            # Positional needs consistency
+            # ADX check - STRATEGY SPECIFIC!
+            # Mean reversion: ADX ≥18 (pullback = weaker trend temporarily)
+            # Momentum: ADX ≥22 (strong consistent trend)
             adx = indicators.get('adx', 0)
-            if adx < 22:
-                return False
+            if signal_type == 'MEAN_REVERSION':
+                if adx < 18:  # More lenient for mean reversion
+                    return False
+            else:
+                if adx < 22:  # Strict for momentum
+                    return False
 
-            # RSI check - tighter healthy range (45-68)
-            # 45: Confirmed uptrend
-            # 68: Strong but not extreme
-            # Tighter than before for better quality
-            rsi = indicators.get('rsi', 0)
-            if rsi < 45 or rsi > 68:
-                return False
+            # NO RSI CHECK - Let strategy-specific quality scoring handle it!
+            # Mean reversion needs RSI 30-55 (would be rejected by hardcoded limits)
+            # Momentum needs RSI 50-68 (validated by quality scoring)
 
             # Trend check (must be in uptrend)
             if not mtf_result.get('uptrend', False):
                 return False
 
-            # Signal strength - balanced (6.8+)
-            # Same as swing - comprehensive score
+            # Signal strength - balanced (6.5+)
+            # Same as swing - quality scoring handles filtering
             signal_score = mtf_result.get('signal_score', 0)
-            if signal_score < 6.8:
+            if signal_score < 6.5:
                 return False
 
             return True
@@ -316,18 +401,65 @@ class SequentialScanner:
 
         indicators = mtf_result.get('indicators', {})
         entry_price = mtf_result.get('current_price', 0)
+        signal_type = mtf_result.get('signal_type', 'MOMENTUM')
 
-        # Calculate stop loss and targets based on strategy type
+        # Calculate stop loss and targets based on strategy type AND signal type
         if strategy_type == 'swing':
-            stop_loss = entry_price * (1 - SWING_STOP_LOSS)
-            target1 = entry_price * (1 + SWING_TARGETS[0])
-            target2 = entry_price * (1 + SWING_TARGETS[1])
-            target3 = entry_price * (1 + SWING_TARGETS[2])
+            # SWING: Use config values with optional ATR adjustment
+            from config.settings import (SWING_STOP_LOSS, USE_ATR_STOP_LOSS, 
+                                        ATR_MULTIPLIER_SWING, ATR_MIN_STOP_LOSS, ATR_MAX_STOP_LOSS)
+            
+            # Calculate base stop loss percentage
+            if USE_ATR_STOP_LOSS and indicators.get('atr', 0) > 0:
+                # ATR-based stop loss (volatility-adjusted)
+                atr = indicators['atr']
+                atr_stop_pct = (atr * ATR_MULTIPLIER_SWING) / entry_price
+                # Clamp between min and max
+                stop_loss_pct = max(ATR_MIN_STOP_LOSS, min(atr_stop_pct, ATR_MAX_STOP_LOSS))
+            else:
+                # Fixed percentage stop loss (fallback)
+                stop_loss_pct = SWING_STOP_LOSS
+            
+            if signal_type == 'MEAN_REVERSION':
+                stop_loss = entry_price * (1 - stop_loss_pct)
+                targets = [0.04, 0.07, 0.10]
+            elif signal_type == 'BREAKOUT':
+                stop_loss = entry_price * (1 - stop_loss_pct)
+                targets = [0.05, 0.08, 0.12]
+            else:  # MOMENTUM
+                stop_loss = entry_price * (1 - stop_loss_pct)
+                targets = [0.04, 0.07, 0.10]
+            
+            target1 = entry_price * (1 + targets[0])
+            target2 = entry_price * (1 + targets[1])
+            target3 = entry_price * (1 + targets[2])
         else:  # positional
-            stop_loss = entry_price * (1 - POSITIONAL_STOP_LOSS)
-            target1 = entry_price * (1 + POSITIONAL_TARGETS[0])
-            target2 = entry_price * (1 + POSITIONAL_TARGETS[1])
-            target3 = entry_price * (1 + POSITIONAL_TARGETS[2])
+            # POSITIONAL: Use strategy-specific configs with optional ATR adjustment
+            from config.settings import (MEAN_REVERSION_CONFIG, MOMENTUM_CONFIG, BREAKOUT_CONFIG,
+                                        USE_ATR_STOP_LOSS, ATR_MULTIPLIER_POSITIONAL, 
+                                        ATR_MIN_STOP_LOSS, ATR_MAX_STOP_LOSS)
+            
+            if signal_type == 'MEAN_REVERSION':
+                strategy_config = MEAN_REVERSION_CONFIG
+            elif signal_type == 'BREAKOUT':
+                strategy_config = BREAKOUT_CONFIG
+            else:  # MOMENTUM
+                strategy_config = MOMENTUM_CONFIG
+            
+            # Calculate stop loss with optional ATR adjustment
+            if USE_ATR_STOP_LOSS and indicators.get('atr', 0) > 0:
+                # ATR-based stop loss (volatility-adjusted)
+                atr = indicators['atr']
+                atr_stop_pct = (atr * ATR_MULTIPLIER_POSITIONAL) / entry_price
+                # Clamp between min and max
+                stop_loss_pct = max(ATR_MIN_STOP_LOSS, min(atr_stop_pct, ATR_MAX_STOP_LOSS))
+                stop_loss = entry_price * (1 - stop_loss_pct)
+            else:
+                # Fixed percentage stop loss (fallback)
+                stop_loss = entry_price * (1 - strategy_config['STOP_LOSS'])
+            target1 = entry_price * (1 + strategy_config['TARGETS'][0])
+            target2 = entry_price * (1 + strategy_config['TARGETS'][1])
+            target3 = entry_price * (1 + strategy_config['TARGETS'][2])
 
         # Calculate risk/reward ratio
         risk_amount = entry_price - stop_loss
@@ -339,9 +471,9 @@ class SequentialScanner:
 
         # Use swing or positional capital allocation
         if strategy_type == 'swing':
-            allocated_capital = INITIAL_CAPITAL * 0.60  # 60% for swing
+            allocated_capital = INITIAL_CAPITAL * 0.30  # 30% for swing
         else:
-            allocated_capital = INITIAL_CAPITAL * 0.40  # 40% for positional
+            allocated_capital = INITIAL_CAPITAL * 0.70  # 70% for positional
 
         # Base position size (25% max per position)
         max_position = allocated_capital * MAX_POSITION_SIZE
@@ -387,6 +519,17 @@ class SequentialScanner:
             # Detailed scoring breakdown (NEW!)
             'technical_score': mtf_result.get('technical_score', 5.0),  # Technical indicators score
             'trend_only_score': mtf_result.get('trend_only_score', 5.0),  # EMA trend only
+            
+            # Quality metrics for filtering (CRITICAL!)
+            'mean_reversion_score': mtf_result.get('mean_reversion_quality', {}).get('score', 0),
+            'mean_reversion_valid': mtf_result.get('mean_reversion_quality', {}).get('is_valid', False),
+            'mean_reversion_reasons': mtf_result.get('mean_reversion_quality', {}).get('reasons', []),
+            'momentum_score': mtf_result.get('momentum_quality', {}).get('score', 0),
+            'momentum_valid': mtf_result.get('momentum_quality', {}).get('is_valid', False),
+            'momentum_reasons': mtf_result.get('momentum_quality', {}).get('reasons', []),
+            'breakout_score': mtf_result.get('breakout_quality', {}).get('score', 0),
+            'breakout_valid': mtf_result.get('breakout_quality', {}).get('is_valid', False),
+            'breakout_reasons': mtf_result.get('breakout_quality', {}).get('reasons', []),
 
             # Price levels
             'current_price': round(entry_price, 2),
@@ -411,6 +554,10 @@ class SequentialScanner:
             'adx': round(indicators.get('adx', 25), 1),
             'macd': indicators.get('macd', 0),
             'volume_ratio': round(indicators.get('volume_ratio', 1.0), 2),
+            
+            # Moving averages for Discord Price Position section
+            'ema_20': round(indicators.get('ema_21', 0), 2),  # Using EMA_21 as 20-MA
+            'ema_50': round(indicators.get('ema_50', 0), 2),
 
             # Trend analysis (REAL values from technical analysis)
             'ema_trend': mtf_result.get('ema_trend', 'NEUTRAL'),

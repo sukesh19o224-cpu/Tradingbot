@@ -199,6 +199,11 @@ class MultiTimeframeAnalyzer:
             'elliott_wave_count': elliott_wave.get('wave_count', 0),
             'elliott_signal': math_signals.get('elliott', 'NEUTRAL'),
             'technical_signals': indicators['signals'],  # All technical signals
+            
+            # ADD MISSING EMAs for signal classification
+            'ema_20': indicators.get('ema_20', 0),
+            'ema_50': ema_50,
+            'ema_200': ema_200,
         }
 
     def _analyze_intraday(self, df: pd.DataFrame) -> Dict:
@@ -263,15 +268,35 @@ class MultiTimeframeAnalyzer:
         }
 
     def _detect_breakout(self, df: pd.DataFrame) -> bool:
-        """Detect recent breakout on 15m chart"""
-        if len(df) < 20:
+        """
+        Detect recent breakout on 15m chart
+        
+        Breakout = Price breaking above recent consolidation/resistance
+        Industry standard: Last 3-5 candles must be above prior 10-20 candle high
+        """
+        if len(df) < 15:
             return False
 
         current_price = float(df['Close'].iloc[-1])
-        recent_high = float(df['High'].iloc[-20:-1].max())
-
-        # Breakout if current price > recent high
-        return current_price > recent_high * 1.005  # 0.5% above recent high
+        
+        # Check last 3 candles (current + 2 prior) - must all be elevated
+        recent_3_candles_low = float(df['Low'].iloc[-3:].min())
+        
+        # Get consolidation high from prior 10 candles (before the breakout)
+        consolidation_high = float(df['High'].iloc[-13:-3].max())
+        
+        # BREAKOUT CONDITIONS:
+        # 1. Current price above consolidation (0.2%+ breakout - more lenient)
+        # 2. Last 3 candles mostly stayed above consolidation (2 out of 3 is okay)
+        breakout_threshold = consolidation_high * 1.002  # 0.2% above consolidation (was 0.3%)
+        
+        is_above_consolidation = current_price > breakout_threshold
+        
+        # Check how many of last 3 candles held above consolidation (need 2 out of 3)
+        candles_above = sum(1 for price in df['Low'].iloc[-3:] if price > consolidation_high)
+        sustained_breakout = candles_above >= 2  # At least 2 out of 3 candles held
+        
+        return is_above_consolidation and sustained_breakout
 
     def _check_momentum(self, df: pd.DataFrame) -> bool:
         """Check if momentum is weakening"""
@@ -358,28 +383,49 @@ class MultiTimeframeAnalyzer:
             })
 
         # Calculate COMPREHENSIVE quality score using ALL indicators
+        # INDUSTRY STANDARD: Technical indicators (RSI/ADX/MACD/Volume) are primary edge (50%)
+        # Math indicators (Fibonacci/S/R) are context only (10%)
         technical_score = daily.get('technical_signals', {}).get('technical_score', 5.0)
         mathematical_score = daily.get('mathematical_score', 5.0)
 
         if intraday:
-            # With intraday: Balanced scoring across all components
+            # With intraday: Technical indicators as primary edge
             combined['overall_quality'] = (
-                daily['trend_score'] * 0.35 +        # EMA trend (35%)
-                technical_score * 0.30 +             # RSI, MACD, ADX, Volume (30%)
-                mathematical_score * 0.25 +          # Fibonacci, Elliott, Gann, S/R (25%)
-                intraday['entry_quality'] * 0.10     # Intraday timing (10%)
+                technical_score * 0.50 +             # Technical (RSI, MACD, ADX, Volume) - PRIMARY EDGE (50%)
+                daily['trend_score'] * 0.30 +        # EMA trend structure (30%)
+                intraday['entry_quality'] * 0.10 +   # Intraday timing precision (10%)
+                mathematical_score * 0.10            # Mathematical (Fibonacci, S/R) - context only (10%)
             )
         else:
-            # Without intraday: Focus on daily analysis
+            # Without intraday: Focus on technical + trend
             combined['overall_quality'] = (
-                daily['trend_score'] * 0.40 +        # EMA trend (40%)
-                technical_score * 0.35 +             # Technical indicators (35%)
-                mathematical_score * 0.25            # Mathematical indicators (25%)
+                technical_score * 0.50 +             # Technical indicators - PRIMARY EDGE (50%)
+                daily['trend_score'] * 0.40 +        # EMA trend structure (40%)
+                mathematical_score * 0.10            # Mathematical - context only (10%)
             )
 
         # ADD MISSING FIELDS for sequential_scanner compatibility
         combined['uptrend'] = daily['trend'] in ['UPTREND', 'STRONG_UPTREND', 'WEAK_UPTREND']
-        combined['signal_score'] = combined['overall_quality']  # Comprehensive score
+        
+        # Signal score with strategic boost for mean reversion (if valid quality)
+        base_signal_score = combined['overall_quality']
+        
+        # Add signal type classification BEFORE scoring adjustment
+        signal_type = self._classify_signal_type(daily, intraday)
+        combined['signal_type'] = signal_type
+        
+        # STRATEGIC BOOST: Mean reversion signals get bonus if they pass quality checks
+        # This helps them compete with momentum while maintaining quality standards
+        if signal_type == 'MEAN_REVERSION':
+            mr_quality = self._check_mean_reversion_quality(daily)
+            if mr_quality['is_valid'] and mr_quality['score'] >= 60:
+                # High quality mean reversion: +0.5 boost
+                base_signal_score = min(10.0, base_signal_score + 0.5)
+            elif mr_quality['is_valid'] and mr_quality['score'] >= 50:
+                # Good quality mean reversion: +0.3 boost
+                base_signal_score = min(10.0, base_signal_score + 0.3)
+        
+        combined['signal_score'] = base_signal_score  # Comprehensive score with boost
         combined['technical_score'] = technical_score  # Add technical score
         combined['trend_only_score'] = daily['trend_score']  # Keep trend-only for reference
         combined['current_price'] = daily['current_price']
@@ -406,15 +452,291 @@ class MultiTimeframeAnalyzer:
         combined['ema_trend'] = tech_signals.get('ema_trend', 'NEUTRAL')
         combined['macd_signal'] = tech_signals.get('macd_signal', 'NEUTRAL')
 
-        # Add signal type classification
-        if intraday and intraday.get('recent_breakout'):
-            combined['signal_type'] = 'BREAKOUT'
-        elif daily['rsi'] > 60:
-            combined['signal_type'] = 'MOMENTUM'
-        else:
-            combined['signal_type'] = 'MEAN_REVERSION'
+        # Add quality metrics (signal_type already added above during scoring)
+        combined['mean_reversion_quality'] = self._check_mean_reversion_quality(daily)
+        combined['momentum_quality'] = self._check_momentum_quality(daily)
+        combined['breakout_quality'] = self._check_breakout_quality(daily, intraday)
 
         return combined
+
+    def _classify_signal_type(self, daily: Dict, intraday: Optional[Dict]) -> str:
+        """
+        Classify signal as BREAKOUT, MOMENTUM, or MEAN_REVERSION
+        BALANCED approach - not too strict, not too lenient
+        
+        RESTORED: Back to working configuration that catches real pullbacks
+        """
+        rsi = daily.get('rsi', 50)
+        price = daily.get('current_price', 0)
+        ema_20 = daily.get('ema_20', 0)
+        ema_50 = daily.get('ema_50', 0)
+        ema_200 = daily.get('ema_200', 0)
+        volume_ratio = daily.get('volume_ratio', 1.0)
+        macd_histogram = daily.get('macd_histogram', 0)
+
+        # BREAKOUT: Breaking resistance with volume surge (15-min chart)
+        # Breakouts are powerful - they combine momentum + fresh demand
+        if intraday and intraday.get('recent_breakout'):
+            if volume_ratio > 1.5:  # Good volume (was 1.8 - too strict)
+                return 'BREAKOUT'
+
+        # MEAN_REVERSION: Pullback in uptrend (Industry Standard)
+        # RSI 30-45 = true pullback zone (professional range)
+        if 30 <= rsi <= 45:
+            # Must be in uptrend (above 50-MA - STRICT)
+            if ema_50 > 0 and price > ema_50:
+                # Must be pulling back (below 20-MA - STRICT)
+                if ema_20 > 0 and price < ema_20:
+                    return 'MEAN_REVERSION'
+                # Fallback: If no 20-MA, RSI check is enough
+                elif ema_20 <= 0:
+                    return 'MEAN_REVERSION'
+            # Alternative: Above 200-MA if 50-MA not available
+            elif ema_200 > 0 and price > ema_200:
+                if ema_20 > 0 and price < ema_20:
+                    return 'MEAN_REVERSION'
+                elif ema_20 <= 0:
+                    return 'MEAN_REVERSION'
+
+        # MOMENTUM: RSI 60-70, strong trend, above EMAs (Industry Standard)
+        if 60 <= rsi <= 70:
+            if price > ema_50:  # Above 50-day MA
+                return 'MOMENTUM'
+        
+        # Default: If nothing else matched, classify as momentum
+        # (will be filtered by quality scoring)
+        return 'MOMENTUM'
+
+    def _check_mean_reversion_quality(self, daily: Dict) -> Dict:
+        """
+        Check if mean reversion setup has good entry confirmation
+        Returns quality metrics for filtering
+        """
+        from config.settings import MEAN_REVERSION_CONFIG
+
+        quality = {
+            'is_valid': False,
+            'score': 0,
+            'reasons': []
+        }
+
+        rsi = daily.get('rsi', 50)
+        price = daily.get('current_price', 0)
+        ema_50 = daily.get('ema_50', 0)
+        volume_ratio = daily.get('volume_ratio', 1.0)
+        macd_histogram = daily.get('macd_histogram', 0)
+        rs_rating = daily.get('rs_rating', 100)  # RS vs Nifty 50
+
+        score = 0
+
+        # 1. RSI in mean reversion zone (30-45 = professional range)
+        if 30 <= rsi <= 40:
+            score += 30
+            quality['reasons'].append(f'RSI in strong reversal zone ({rsi:.1f})')
+        elif 40 < rsi <= 45:
+            score += 20
+            quality['reasons'].append(f'RSI in pullback zone ({rsi:.1f})')
+
+        # 2. Still in uptrend (MUST be above 50-MA - STRICT)
+        if ema_50 > 0 and price > ema_50:
+            score += 25
+            quality['reasons'].append('Above 50-day MA (uptrend intact)')
+
+        # 3. Volume pickup (buying interest - minimum 1.0x)
+        if volume_ratio >= MEAN_REVERSION_CONFIG['VOLUME_SPIKE_MIN']:
+            score += 20
+            quality['reasons'].append(f'Volume spike {volume_ratio:.1f}x')
+        elif volume_ratio >= 1.0:
+            score += 10
+            quality['reasons'].append(f'Volume average {volume_ratio:.1f}x')
+
+        # 4. MACD showing reversal signs (histogram turning positive)
+        if macd_histogram > 0:
+            score += 15
+            quality['reasons'].append('MACD turning bullish')
+        elif macd_histogram > -0.5:
+            score += 10
+            quality['reasons'].append('MACD close to turning')
+
+        # 5. Relative Strength vs Nifty 50 (O'Neil method)
+        if rs_rating >= 110:  # Strongly outperforming
+            score += 15
+            quality['reasons'].append(f'RS {rs_rating:.0f} (strong outperformer)')
+        elif rs_rating >= 100:  # Outperforming
+            score += 10
+            quality['reasons'].append(f'RS {rs_rating:.0f} (outperforming)')
+
+        quality['score'] = score
+        quality['is_valid'] = score >= 50  # Industry Standard: 50+ score minimum
+
+        return quality
+
+    def _check_momentum_quality(self, daily: Dict) -> Dict:
+        """
+        Check if momentum setup has good entry confirmation
+        Avoids overbought entries and ensures strong trend
+        Returns quality metrics for filtering
+        """
+        from config.settings import MOMENTUM_CONFIG
+
+        quality = {
+            'is_valid': False,
+            'score': 0,
+            'reasons': []
+        }
+
+        rsi = daily.get('rsi', 50)
+        price = daily.get('current_price', 0)
+        ema_20 = daily.get('ema_20', 0)
+        ema_50 = daily.get('ema_50', 0)
+        volume_ratio = daily.get('volume_ratio', 1.0)
+        macd_histogram = daily.get('macd_histogram', 0)
+        adx = daily.get('adx', 0)
+        rs_rating = daily.get('rs_rating', 100)  # RS vs Nifty 50
+
+        score = 0
+
+        # 1. RSI in momentum zone (60-68 = strong but not overbought)
+        if 60 <= rsi <= 68:
+            score += 25
+            quality['reasons'].append(f'RSI in momentum zone ({rsi:.1f})')
+        elif rsi < 60:
+            score += 5  # Weak momentum
+            quality['reasons'].append('RSI below momentum threshold')
+
+        # 2. Strong trend (above 50 MA)
+        if ema_50 > 0 and price > ema_50:
+            score += 20
+            quality['reasons'].append('Above 50-day MA (strong uptrend)')
+
+        # 3. ADX check - CRITICAL for momentum (Industry Standard)
+        if adx >= MOMENTUM_CONFIG['MIN_ADX']:
+            if adx >= 40:
+                score += 30
+                quality['reasons'].append(f'ADX {adx:.1f} (very strong trend)')
+            else:
+                score += 25
+                quality['reasons'].append(f'ADX {adx:.1f} (strong trend)')
+        else:
+            # No ADX means weak trend - give minimal points
+            score += 5
+            quality['reasons'].append(f'ADX {adx:.1f} (weak trend)')
+
+        # 4. Not too extended (within 10% of 20-day MA)
+        if ema_20 > 0:
+            distance_from_ma20 = (price - ema_20) / ema_20 * 100
+            if distance_from_ma20 <= 10:
+                score += 15
+                quality['reasons'].append(f'{distance_from_ma20:.1f}% from 20-MA (not extended)')
+
+        # 5. Volume confirmation (minimum 1.3x for momentum)
+        if volume_ratio >= 1.5:
+            score += 20
+            quality['reasons'].append(f'Volume {volume_ratio:.1f}x (very strong)')
+        elif volume_ratio >= 1.3:
+            score += 15
+            quality['reasons'].append(f'Volume {volume_ratio:.1f}x (strong)')
+        elif volume_ratio >= 1.0:
+            score += 5
+            quality['reasons'].append(f'Volume {volume_ratio:.1f}x (average)')
+
+        # 6. MACD positive (momentum intact)
+        if macd_histogram > 0:
+            score += 10
+            quality['reasons'].append('MACD bullish')
+
+        # 7. Relative Strength vs Nifty 50 (O'Neil method - CRITICAL for momentum)
+        if rs_rating >= 120:  # Very strongly outperforming
+            score += 20
+            quality['reasons'].append(f'RS {rs_rating:.0f} (very strong outperformer)')
+        elif rs_rating >= 110:  # Strongly outperforming
+            score += 15
+            quality['reasons'].append(f'RS {rs_rating:.0f} (strong outperformer)')
+        elif rs_rating >= 100:  # Outperforming
+            score += 10
+            quality['reasons'].append(f'RS {rs_rating:.0f} (outperforming)')
+
+        quality['score'] = score
+        quality['is_valid'] = score >= 60  # Industry Standard: 60+ for momentum
+
+        return quality
+
+    def _check_breakout_quality(self, daily: Dict, intraday: Optional[Dict]) -> Dict:
+        """
+        Check quality of BREAKOUT setup
+        
+        BREAKOUT = Momentum + Fresh breakout from consolidation
+        Minimum: 65/100 (slightly higher than momentum since breakouts are powerful)
+        """
+        quality = {
+            'score': 0,
+            'is_valid': False,
+            'reasons': []
+        }
+
+        score = 0
+        rsi = daily.get('rsi', 50)
+        adx = daily.get('adx', 0)
+        price = daily.get('current_price', 0)
+        ema_20 = daily.get('ema_20', 0)
+        ema_50 = daily.get('ema_50', 0)
+        volume_ratio = 1.5 if daily.get('volume_trend') == 'STRONG' else 1.0
+        macd_histogram = daily.get('macd_histogram', 0)
+
+        # 1. RSI in breakout zone (55-70 - momentum building but not overbought)
+        if 55 <= rsi <= 70:
+            if 60 <= rsi <= 68:
+                score += 25
+                quality['reasons'].append(f'RSI {rsi:.1f} (optimal breakout zone)')
+            else:
+                score += 20
+                quality['reasons'].append(f'RSI {rsi:.1f} (good for breakout)')
+
+        # 2. Above 50-MA (must be in uptrend)
+        if ema_50 > 0 and price > ema_50:
+            score += 25
+            quality['reasons'].append(f'Above 50-MA (uptrend confirmed)')
+
+        # 3. ADX showing strong trend (≥25)
+        if adx >= 30:
+            score += 30
+            quality['reasons'].append(f'ADX {adx:.1f} (explosive trend)')
+        elif adx >= 25:
+            score += 25
+            quality['reasons'].append(f'ADX {adx:.1f} (strong trend)')
+
+        # 4. EXPLOSIVE volume (2x+ required for breakouts)
+        if volume_ratio >= 2.5:
+            score += 25
+            quality['reasons'].append(f'Volume {volume_ratio:.1f}x (institutional buying)')
+        elif volume_ratio >= 2.0:
+            score += 20
+            quality['reasons'].append(f'Volume {volume_ratio:.1f}x (strong interest)')
+        elif volume_ratio >= 1.5:
+            score += 15
+            quality['reasons'].append(f'Volume {volume_ratio:.1f}x (good volume)')
+
+        # 5. MACD positive (momentum confirmation)
+        if macd_histogram > 0:
+            score += 15
+            quality['reasons'].append('MACD positive (bullish momentum)')
+
+        # 6. RS Rating (if available)
+        rs_rating = daily.get('rs_rating', 0)
+        if rs_rating >= 120:
+            score += 20
+            quality['reasons'].append(f'RS {rs_rating:.0f} (exceptional vs market)')
+        elif rs_rating >= 110:
+            score += 15
+            quality['reasons'].append(f'RS {rs_rating:.0f} (strong vs market)')
+        elif rs_rating >= 100:
+            score += 10
+            quality['reasons'].append(f'RS {rs_rating:.0f} (outperforming market)')
+
+        quality['score'] = score
+        quality['is_valid'] = score >= 60  # Breakouts need 60+ (same as momentum - rare but powerful)
+
+        return quality
 
 
 if __name__ == "__main__":

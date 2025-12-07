@@ -74,7 +74,11 @@ class PaperTrader:
                 data = json.load(f)
 
             self.capital = data.get('capital', self.initial_capital)
-            self.positions = data.get('positions', {})
+            
+            # FIX: Ensure positions is always a dict (not list from old format)
+            positions_data = data.get('positions', {})
+            self.positions = positions_data if isinstance(positions_data, dict) else {}
+            
             self.performance = data.get('performance', {})
             self.start_date = data.get('start_date', datetime.now().isoformat())
 
@@ -200,7 +204,7 @@ class PaperTrader:
             if strategy == 'swing':
                 default_max_days = 7  # Swing trades: 7 trading days (~1-2 weeks)
             elif strategy == 'positional':
-                default_max_days = 30  # Positional trades: 30 trading days (~6 weeks)
+                default_max_days = 15  # Positional trades: 15 trading days (~3 weeks) - FAST PROFIT
             else:
                 default_max_days = 15  # Unknown strategy: conservative default
 
@@ -293,32 +297,33 @@ class PaperTrader:
             # Priority 2: Target 2 (good profit)
             elif current_price >= position['target2'] and not position.get('t2_hit', False):
                 exit_info = self._exit_position(
-                    symbol, current_price, 'TARGET_2', partial=0.35  # BALANCED: 35% at T2 (hold 65% for T3)
+                    symbol, current_price, 'TARGET_2', partial=0.40  # OPTIMIZED: 40% at T2 (hold 60% for T3)
                 )
                 if exit_info:
                     exits.append(exit_info)
-                    # IMPROVED: Move stop to HALFWAY between entry and T1 (GUARANTEES profit!)
+                    # IMPROVED: Move stop to +6% after T2 to LOCK BIGGER PROFIT
                     if symbol in self.positions and exit_info['exit_type'] == 'PARTIAL':
-                        halfway_stop = (entry_price + position['target1']) / 2
-                        self.positions[symbol]['stop_loss'] = halfway_stop
+                        profit_lock_stop_t2 = entry_price * 1.06  # +6% profit locked
+                        self.positions[symbol]['stop_loss'] = profit_lock_stop_t2
                         self.positions[symbol]['t2_hit'] = True  # Mark T2 as hit
                         self._save_portfolio()  # Save updated stop
-                        print(f"   🔒 Stop moved to ₹{halfway_stop:.2f} (halfway to T1 - PROFIT LOCKED!)")
+                        print(f"   🔒 Stop moved to +6% (₹{profit_lock_stop_t2:.2f}) after T2 - BIG PROFIT LOCKED!")
                 # Don't continue, check other exits too
 
             # Priority 3: Target 1 (minimum profit)
             elif current_price >= position['target1'] and not position.get('t1_hit', False):
                 exit_info = self._exit_position(
-                    symbol, current_price, 'TARGET_1', partial=0.25  # BALANCED: 25% at T1 (hold 75% for T2/T3)
+                    symbol, current_price, 'TARGET_1', partial=0.30  # OPTIMIZED: 30% at T1 (hold 70% for T2/T3)
                 )
                 if exit_info:
                     exits.append(exit_info)
-                    # CRITICAL: Move stop to breakeven after T1 to protect profit
+                    # IMPROVED: Move stop to +3% after T1 to LOCK PROFIT (not breakeven)
                     if symbol in self.positions and exit_info['exit_type'] == 'PARTIAL':
-                        self.positions[symbol]['stop_loss'] = entry_price
+                        profit_lock_stop = entry_price * 1.03  # +3% profit locked
+                        self.positions[symbol]['stop_loss'] = profit_lock_stop
                         self.positions[symbol]['t1_hit'] = True  # Mark T1 as hit
                         self._save_portfolio()  # Save updated stop
-                        print(f"   🔒 Stop moved to breakeven (₹{entry_price:.2f}) after T1")
+                        print(f"   🔒 Stop moved to +3% (₹{profit_lock_stop:.2f}) after T1 - PROFIT LOCKED!")
                 # Don't continue, check other exits too
 
             # Priority 4: STOP LOSS (including trailing stop)
@@ -405,7 +410,8 @@ class PaperTrader:
                 'pnl': pnl,
                 'pnl_percent': pnl_percent,
                 'reason': reason,
-                'trade_type': position['trade_type']
+                'trade_type': position['trade_type'],
+                'signal_type': position.get('signal_type', 'MOMENTUM')  # Save signal type for analysis
             }
 
             self.trade_history.append(trade_record)
@@ -548,15 +554,20 @@ class PaperTrader:
             True if a position was exited to free capital
         """
         # Import settings
-        from config.settings import AUTO_EXIT_WEAK_FOR_QUALITY, QUALITY_REPLACEMENT_THRESHOLD, MIN_SCORE_DIFFERENCE
+        from config.settings import (AUTO_EXIT_WEAK_FOR_QUALITY, QUALITY_REPLACEMENT_THRESHOLD, 
+                                     QUALITY_REPLACEMENT_THRESHOLD_BREAKOUT, MIN_SCORE_DIFFERENCE)
 
         if not AUTO_EXIT_WEAK_FOR_QUALITY:
             return False
 
         new_score = new_signal.get('score', 0)
+        signal_type = new_signal.get('signal_type', 'UNKNOWN')
+
+        # BREAKOUT gets lower threshold (rare but powerful)
+        threshold = QUALITY_REPLACEMENT_THRESHOLD_BREAKOUT if signal_type == 'BREAKOUT' else QUALITY_REPLACEMENT_THRESHOLD
 
         # Only replace for high-quality signals
-        if new_score < QUALITY_REPLACEMENT_THRESHOLD:
+        if new_score < threshold:
             return False
 
         # Need at least one position to replace

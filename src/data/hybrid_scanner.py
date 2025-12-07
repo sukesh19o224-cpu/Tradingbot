@@ -85,20 +85,25 @@ class HybridScanner:
 
         # Step 3: Detect swing and positional opportunities
         print("🎯 Step 3/3: Detecting swing & positional setups...")
+        print(f"{'='*70}\n")
         detect_start = time.time()
 
         swing_signals = []
         positional_signals = []
         both_count = 0
 
-        for base_signal in base_signals:
+        for idx, base_signal in enumerate(base_signals, 1):
             symbol = base_signal['symbol']
+            signal_type = base_signal.get('signal_type', 'UNKNOWN')
+            
+            print(f"[{idx}/{len(base_signals)}] {symbol} - {signal_type}")
 
             # Get data for this stock
             df_daily = stock_data_daily.get(symbol)
             df_15m = stock_data_15m.get(symbol)
 
             if df_daily is None:
+                print(f"   ❌ No data available\n")
                 continue
 
             # Detect opportunities
@@ -106,11 +111,31 @@ class HybridScanner:
                 symbol, df_daily, df_15m, base_signal
             )
 
+            results = []
             if swing_sig:
                 swing_signals.append(swing_sig)
-
+                results.append("✅ SWING")
+            else:
+                results.append("❌ Swing")
+                
             if pos_sig:
                 positional_signals.append(pos_sig)
+                results.append("✅ POSITIONAL")
+                
+                # Show quality scores for positional
+                mean_rev_score = pos_sig.get('mean_reversion_score', 0)
+                momentum_score = pos_sig.get('momentum_score', 0)
+                
+                if signal_type == 'MEAN_REVERSION':
+                    valid = pos_sig.get('mean_reversion_valid', False)
+                    print(f"   📊 Mean Rev Quality: {mean_rev_score}/100 {'✅ PASS' if valid else '❌ FAIL'}")
+                elif signal_type == 'MOMENTUM':
+                    valid = pos_sig.get('momentum_valid', False)
+                    print(f"   📊 Momentum Quality: {momentum_score}/100 {'✅ PASS' if valid else '❌ FAIL'}")
+            else:
+                results.append("❌ Positional")
+
+            print(f"   {' | '.join(results)}\n")
 
             if swing_sig and pos_sig:
                 both_count += 1
