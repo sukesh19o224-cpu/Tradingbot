@@ -37,7 +37,8 @@ show_menu() {
     echo "  5) 📈 Show Summary          - View portfolio performance"
     echo "  6) 🧪 Test Discord          - Test Discord alerts"
     echo "  7) 🔧 OLD System            - Run old main.py (backward compat)"
-    echo "  8) ❌ Exit"
+    echo "  8) 📊 Daily Summary         - Send position analysis to Discord"
+    echo "  9) ❌ Exit"
     echo ""
     echo "💡 CONTINUOUS Mode (Option 4):"
     echo "   • Heartbeat every 5 mins when market closed"
@@ -195,6 +196,29 @@ show_summary() {
     python3 main_eod_system.py --summary
 }
 
+run_daily_summary() {
+    echo ""
+    echo "╔══════════════════════════════════════════════════════════╗"
+    echo "║     📊 DAILY SUMMARY - Position Analysis                 ║"
+    echo "╚══════════════════════════════════════════════════════════╝"
+    echo ""
+    echo "📌 What this does:"
+    echo "   • Analyzes all open positions with technical indicators"
+    echo "   • Uses RSI, ADX, MACD, Moving Averages, Volume"
+    echo "   • Predicts outlook (UP/DOWN/NEUTRAL) for each position"
+    echo "   • Sends detailed analysis to Discord"
+    echo ""
+    echo "⏳ Expected time: ~30 seconds"
+    echo "📱 Output: Discord alert with position analysis"
+    echo ""
+    echo "Press Enter to start, or Ctrl+C to cancel"
+    read -p ""
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    python3 main_eod_system.py --daily-summary
+}
+
 test_discord() {
     echo ""
     echo "🧪 Testing Discord connection..."
@@ -265,11 +289,14 @@ case "$1" in
     old)
         run_old_system
         ;;
+    daily-summary|summary-daily)
+        run_daily_summary
+        ;;
     *)
         # Interactive menu
         while true; do
             show_menu
-            read -p "Enter choice (1-8): " choice
+            read -p "Enter choice (1-9): " choice
 
             case $choice in
                 1)
@@ -306,6 +333,11 @@ case "$1" in
                     read -p "Press Enter to continue..."
                     ;;
                 8)
+                    run_daily_summary
+                    echo ""
+                    read -p "Press Enter to continue..."
+                    ;;
+                9)
                     echo ""
                     echo "👋 Goodbye!"
                     echo ""
@@ -313,7 +345,7 @@ case "$1" in
                     ;;
                 *)
                     echo ""
-                    echo "❌ Invalid choice. Please enter 1-8."
+                    echo "❌ Invalid choice. Please enter 1-9."
                     sleep 2
                     ;;
             esac

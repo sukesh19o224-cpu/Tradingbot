@@ -17,9 +17,9 @@ load_dotenv()
 INITIAL_CAPITAL = 50000  # Positional capital (₹50,000) - REAL MONEY
 PAPER_TRADING_CAPITAL = 50000  # Positional paper trading
 
-# SWING Portfolio (PAPER TRADING - Testing Phase)
-SWING_CAPITAL = 25000  # Swing capital (₹25,000) - PAPER ONLY for now
-# NOTE: Swing is completely separate portfolio with own P&L tracking
+# SWING/INTRADAY Portfolio (PAPER TRADING - Testing Phase)
+SWING_CAPITAL = 50000  # Swing/Intraday capital (₹50,000) - PAPER ONLY for now - INTRADAY SYSTEM
+# NOTE: Swing = ONE DAY TRADER (INTRADAY ONLY) - closes ALL positions before 3:30 PM (NO overnight holds, force exit at 3:25 PM)
 # Once proven profitable in paper trading, can deploy with real money
 
 # ═══════════════════════════════════════════════════════════════
@@ -37,33 +37,56 @@ DRAWDOWN_THRESHOLD_MINOR = 0.05  # At 5% drawdown, reduce to 75% size
 DRAWDOWN_THRESHOLD_MAJOR = 0.10  # At 10% drawdown, reduce to 50% size
 
 # Position Limits (Per Portfolio)
-MAX_POSITIONS = 6  # Positional: 6 positions max (6 × ₹8.3K = ₹50K)
-MAX_POSITIONS_SWING = 3  # Swing: 3 positions max (3 × ₹8.3K = ₹25K) - STRICT: Only A+ setups
+MAX_POSITIONS = 7  # Positional: 7 positions max (7 × ₹7.1K = ₹50K)
+MAX_POSITIONS_SWING = 10  # Swing: 10 positions max (high-frequency rotation - more opportunities for quick 1-2% profits)
 MAX_POSITION_SIZE = 0.20  # 20% max per position (₹10K from ₹50K)
 MAX_SECTOR_EXPOSURE = 0.40  # 40% max per sector
 
 # Market Circuit Breaker (Exit all positions if market crashes)
 MARKET_CRASH_THRESHOLD = -0.035  # -3.5% - Exit all if NIFTY down >3.5% (more realistic)
 NIFTY_SYMBOL = "^NSEI"  # NIFTY 50 index symbol
-TRAILING_STOP_ACTIVATION = 0.03  # Activate trailing stop at +3% (STRICT - earlier activation)
-TRAILING_STOP_DISTANCE = 0.02  # Trail by 2% (STRICT - tighter trailing)
+# Hybrid Trailing Stop (Breakeven + ATR-based)
+# NOTE: These are DEFAULT/SWING values - positional uses strategy-specific overrides in code
+# Swing: Quick profit-taking - tighter trailing stops
+TRAILING_STOP_BREAKEVEN_ACTIVATION = 0.005  # Swing: Move stop to breakeven at +0.5% (ULTRA-QUICK risk-free)
+TRAILING_STOP_ACTIVATION = 0.01  # Swing: Activate ATR-based trailing at +1% (quick profits)
+TRAILING_STOP_DISTANCE = 0.008  # Swing fallback: Trail by 0.8% if ATR unavailable (ultra-tight)
+TRAILING_STOP_ATR_MULTIPLIER = 0.8  # Swing: Trail by 0.8x ATR (ultra-tight for quick profit-taking)
 
-# Stop Loss & Targets - FAST PROFIT SWING (5 days max)
-SWING_STOP_LOSS = 0.025  # 2.5% stop loss for swing (TIGHT - only strong momentum stocks)
+# Positional Trailing Stops (hardcoded in paper_trader.py check_exits - NOT using settings above)
+# Positional uses: breakeven at +2%, trailing at +3%, ATR multiplier 0.8x (same as setting)
+# NOTE: Positional fallback uses TRAILING_STOP_DISTANCE (0.8%) - should use wider value
+# This is handled in code with strategy-specific overrides
+
+# Stop Loss & Targets - ONE DAY TRADER (INTRADAY ONLY - same day exits, quick profit-taking)
+SWING_STOP_LOSS = 0.01  # 1.0% stop loss for swing (ULTRA-TIGHT - quick exits, frequent trades, preserves capital)
 POSITIONAL_STOP_LOSS = 0.04  # 4% stop loss for positional
 
 # ATR-Based Dynamic Stop Loss (Volatility-Adjusted)
 # Adapts stop loss to each stock's volatility - prevents premature exits
 USE_ATR_STOP_LOSS = True  # Enable ATR-based stop loss (recommended)
 ATR_PERIOD = 14  # 14-day ATR calculation period
-ATR_MULTIPLIER_SWING = 2.0  # 2x ATR for swing (more room for volatile stocks)
-ATR_MULTIPLIER_POSITIONAL = 2.5  # 2.5x ATR for positional (wider stop)
-ATR_MIN_STOP_LOSS = 0.02  # Minimum 2% stop loss (safety floor)
-ATR_MAX_STOP_LOSS = 0.06  # Maximum 6% stop loss (safety ceiling)
+ATR_MULTIPLIER_SWING = 1.0  # 1.0x ATR for swing (ultra-tight stops for quick profits, fast exits)
+ATR_MULTIPLIER_POSITIONAL = 2.5  # 2.5x ATR for positional (wider stop) - UNTOUCHED
 
-# SWING: Fast-moving targets (4%/7%/10%) - hit within 5 days, 2 days buffer
-# Risk/Reward: 2.5% risk → 4%/7%/10% reward = 1.6:1 to 4:1 ratio (EXCELLENT)
-SWING_TARGETS = [0.04, 0.07, 0.10]  # 4%, 7%, 10% targets (FAST PROFIT - 5 days)
+# ATR Stop Loss Clamps (Strategy-Specific)
+# Swing: Tight range for quick trades
+ATR_MIN_STOP_LOSS_SWING = 0.008  # Minimum 0.8% stop loss (ultra-tight for quick trades)
+ATR_MAX_STOP_LOSS_SWING = 0.015  # Maximum 1.5% stop loss (tight ceiling for quick exits)
+
+# Positional: Wider range to allow proper ATR-based stops (2.5x ATR typically gives 2-6% stops)
+ATR_MIN_STOP_LOSS_POSITIONAL = 0.02  # Minimum 2% stop loss (allows proper ATR calculation)
+ATR_MAX_STOP_LOSS_POSITIONAL = 0.06  # Maximum 6% stop loss (prevents excessive stops)
+
+# Backward compatibility (will be overridden in code based on strategy)
+ATR_MIN_STOP_LOSS = 0.02  # Default: Use positional values (wider range)
+ATR_MAX_STOP_LOSS = 0.06  # Default: Use positional values (wider range)
+
+# SWING/INTRADAY: INTRADAY targets (1.0%/1.5%/2.0%) - hit within same day, close all positions before 3:30 PM
+# Strategy: ONE DAY TRADER - Many small wins (1.0-2.0% each) = High total profit through frequent trades (daily reset)
+# Risk/Reward: 1.0% risk → 1.0%/1.5%/2.0% reward = 1:1 to 2:1 ratio (excellent for intraday)
+# Optimized for: 60%+ win rate with daily reset, no overnight risk, quick exits at 1.0-2.0% profit (same day only)
+SWING_TARGETS = [0.01, 0.015, 0.02]  # 1.0%, 1.5%, 2.0% targets (INTRADAY - same day exits only, force exit at 3:25 PM)
 POSITIONAL_TARGETS = [0.05, 0.10, 0.15]  # 5%, 10%, 15% targets (INTERMEDIATE - achievable in 1-2 weeks)
 
 # ═══════════════════════════════════════════════════════════════
@@ -111,12 +134,15 @@ BREAKOUT_CONFIG = {
 EMA_PERIODS = [8, 13, 21, 50, 100, 200]
 SMA_PERIODS = [20, 50, 200]
 
-# RSI Settings - SWING needs strong momentum (50-70 range)
+# RSI Settings - SWING optimized for 1-2% quick moves
 RSI_PERIOD = 14
 RSI_OVERBOUGHT = 70  # Above 70 = overbought (avoid for swing - too late)
 RSI_OVERSOLD = 30    # Below this = oversold (potential reversal)
 RSI_BULLISH_THRESHOLD = 50  # Swing needs RSI 50-70 (strong momentum zone)
-RSI_SWING_MAX = 70   # Swing must be below 70 (not overbought)
+RSI_SWING_MAX = 68   # Swing max RSI (optimized - catch stocks about to move, not already overbought)
+RSI_SWING_MIN = 40   # Swing min RSI (expanded for more opportunities - catch quick momentum)
+RSI_SWING_MAX = 72   # Swing max RSI (expanded - RSI 68-72 can still make 1-2% moves)
+# Note: RSI 40-72 range allows more opportunities while still catching 1-2% quick moves
 
 # MACD Settings
 MACD_FAST = 12
@@ -127,16 +153,18 @@ MACD_SIGNAL = 9
 BB_PERIOD = 20
 BB_STD = 2
 
-# ADX Settings - SWING needs explosive trend strength
+# ADX Settings - SWING optimized for 1-2% quick moves (not strong trends)
 ADX_PERIOD = 14
-ADX_MIN_TREND = 35       # Minimum for swing (VERY STRONG - 5-day profit needs explosive moves)
-ADX_STRONG_TREND = 25    # Strong trend (good for positional)
-ADX_VERY_STRONG = 50     # Very strong trend (rare)
+ADX_MIN_TREND = 12       # Lower ADX for swing - catch stocks ABOUT TO move (not already in strong trend) - 1-2% quick moves
+ADX_STRONG_TREND = 25    # Strong trend (good for positional) - UNTOUCHED
+ADX_VERY_STRONG = 50     # Very strong trend (rare) - UNTOUCHED
+# Note: Low ADX (<20) often precedes quick 1-2% moves before strong trend develops
 
-# Volume Settings - SWING needs strong buying pressure
+# Volume Settings - SWING optimized for 1-2% quick moves
 VOLUME_MA_PERIOD = 20
 VOLUME_SURGE_MULTIPLIER = 2.0  # Swing needs 2x volume (fast-moving stocks)
-VOLUME_SWING_MULTIPLIER = 2.0   # Minimum 2x volume for swing trades
+VOLUME_SWING_MULTIPLIER = 0.8   # Minimum 0.8x volume for swing (low threshold - catch volume spikes starting)
+# Note: We want to catch volume SPIKES (sudden interest) not sustained high volume
 
 # ═══════════════════════════════════════════════════════════════
 # 🔬 ADVANCED MATHEMATICAL INDICATORS
@@ -175,14 +203,15 @@ ML_FEATURES = [
 # ═══════════════════════════════════════════════════════════════
 
 # Scoring System (0-10)
-MIN_SIGNAL_SCORE = 7.0  # Positional: Good quality (balanced - allows MR + Momentum)
-MIN_SWING_SIGNAL_SCORE = 8.5  # Swing: A+ ONLY (STRICT - explosive momentum only)
+MIN_SIGNAL_SCORE = 7.0  # Positional: Good quality (balanced - allows MR + Momentum) - UNTOUCHED
+MIN_SWING_SIGNAL_SCORE = 5.5  # Swing: Lower threshold for 1-2% quick moves (catch more opportunities, exit fast)
 HIGH_QUALITY_SCORE = 8.5  # High quality signal threshold (for auto-replacement)
+# Note: Lower score threshold for swing because we're targeting smaller moves (1-2%) that happen more frequently
 
 # Signal Filtering (Prevent signal flood)
-# STRICT swing limits (30% capital), BALANCED positional limits (70% capital)
-MAX_SWING_SIGNALS_PER_SCAN = 2  # Max swing signals (STRICT - only top 2)
-MAX_POSITIONAL_SIGNALS_PER_SCAN = 5  # Max positional signals (BALANCED - main strategy)
+# HIGH-FREQUENCY swing limits (30% capital), BALANCED positional limits (70% capital) - UNTOUCHED
+MAX_SWING_SIGNALS_PER_SCAN = 5  # Max swing signals (optimized for ₹50K capital - ensures all signals can execute without running out of capital)
+MAX_POSITIONAL_SIGNALS_PER_SCAN = 5  # Max positional signals (BALANCED - main strategy) - UNTOUCHED
 
 # Dynamic Capital Allocation (By Signal Type)
 # DISABLED: Focus on signal quality, not signal type
@@ -197,6 +226,151 @@ AUTO_EXIT_WEAK_FOR_QUALITY = True  # Exit weakest position for high-quality sign
 QUALITY_REPLACEMENT_THRESHOLD = 8.5  # Only replace if new signal score >= 8.5
 QUALITY_REPLACEMENT_THRESHOLD_BREAKOUT = 8.0  # Lower for breakouts (rare but powerful)
 MIN_SCORE_DIFFERENCE = 0.5  # New signal must be at least 0.5 points better than weakest
+
+# ═══════════════════════════════════════════════════════════════
+# 📊 MARKET REGIME DETECTION (Professional Feature)
+# ═══════════════════════════════════════════════════════════════
+
+# MASTER SWITCH - Turn ON/OFF market regime detection
+MARKET_REGIME_DETECTION_ENABLED = True  # Set to True to enable (DEFAULT: OFF for testing)
+
+# Market Regime Detection Settings
+MARKET_REGIME_CONFIG = {
+    # Detection Parameters
+    'LOOKBACK_PERIOD': '3mo',  # Analyze last 3 months of Nifty data
+    'EMA_SHORT': 50,  # 50-day EMA
+    'EMA_LONG': 200,  # 200-day EMA
+    'ADX_PERIOD': 14,  # ADX calculation period
+    'ADX_STRONG_TREND': 25,  # ADX > 25 = strong trend
+    'ADX_WEAK_TREND': 20,  # ADX < 20 = weak trend/sideways
+    
+    # BULL MARKET Adjustments (Normal Operation)
+    'BULL': {
+        'quality_multiplier': 1.0,  # Normal quality thresholds
+        'max_positions_multiplier': 1.0,  # Normal max positions
+        'position_size_multiplier': 1.0,  # Normal position size
+        'description': 'Strong uptrend - Trade aggressively'
+    },
+    
+    # SIDEWAYS MARKET Adjustments (Be Selective)
+    'SIDEWAYS': {
+        'quality_multiplier': 1.5,  # 50% higher quality required (50 → 75, 60 → 90)
+        'max_positions_multiplier': 0.5,  # Half the positions (6 → 3)
+        'position_size_multiplier': 0.75,  # 75% position size
+        'min_rs_rating': 110,  # Only stocks outperforming market
+        'description': 'Choppy market - Only A+ setups'
+    },
+    
+    # BEAR MARKET Adjustments (Defensive)
+    'BEAR': {
+        'quality_multiplier': 1.7,  # 70% higher quality required (60 → 102, effectively stops most trades)
+        'max_positions_multiplier': 0.17,  # 1/6 positions (6 → 1)
+        'position_size_multiplier': 0.25,  # Quarter position size
+        'min_rs_rating': 120,  # Only strongest market leaders
+        'tighten_stops': True,  # Reduce stops to 2% (from 2.5-5%)
+        'description': 'Downtrend - Preserve capital'
+    }
+}
+
+# Regime Detection Display
+SHOW_REGIME_IN_LOGS = True  # Show current market regime in scan logs
+
+# ═══════════════════════════════════════════════════════════════
+# 🇮🇳 INDIA-SPECIFIC FEATURES (Professional Enhancements)
+# ═══════════════════════════════════════════════════════════════
+
+# 1. SECTOR ROTATION TRACKING
+SECTOR_ROTATION_ENABLED = False # Set to True to enable (DEFAULT: OFF for testing)
+
+SECTOR_ROTATION_CONFIG = {
+    # Indian Market Sectors
+    'SECTORS': {
+        'IT': ['TCS.NS', 'INFY.NS', 'WIPRO.NS', 'HCLTECH.NS', 'TECHM.NS', 'LTIM.NS', 'PERSISTENT.NS'],
+        'Banking': ['HDFCBANK.NS', 'ICICIBANK.NS', 'SBIN.NS', 'KOTAKBANK.NS', 'AXISBANK.NS', 
+                   'INDUSINDBK.NS', 'BANKBARODA.NS', 'PNB.NS', 'CANBK.NS', 'UNIONBANK.NS'],
+        'Pharma': ['SUNPHARMA.NS', 'DRREDDY.NS', 'CIPLA.NS', 'DIVISLAB.NS', 'LUPIN.NS', 
+                  'TORNTPHARM.NS', 'ZYDUSLIFE.NS', 'MANKIND.NS'],
+        'Auto': ['MARUTI.NS', 'TATAMOTORS.NS', 'M&M.NS', 'BAJAJ-AUTO.NS', 'HEROMOTOCO.NS', 
+                'EICHERMOT.NS', 'TVSMOTOR.NS', 'ASHOKLEY.NS', 'MOTHERSON.NS'],
+        'FMCG': ['HINDUNILVR.NS', 'ITC.NS', 'NESTLEIND.NS', 'BRITANNIA.NS', 'DABUR.NS', 
+                'MARICO.NS', 'GODREJCP.NS', 'TATACONSUM.NS', 'VBL.NS'],
+        'Metals': ['TATASTEEL.NS', 'HINDALCO.NS', 'JSWSTEEL.NS', 'VEDL.NS', 'JINDALSTEL.NS', 
+                  'NMDC.NS', 'SAIL.NS']
+    },
+    
+    # Sector Rotation Settings
+    'MIN_SECTOR_RS': 105,  # Minimum sector RS vs Nifty to be considered "leading"
+    'TOP_SECTORS_COUNT': 3,  # Focus on top 3 leading sectors
+    'BOOST_LEADING_SECTORS': True,  # Boost signals from leading sectors
+    'LEADING_SECTOR_BOOST': 0.5,  # Add 0.5 to signal score if from leading sector
+    'AVOID_LAGGING_SECTORS': True,  # Skip signals from bottom 2 sectors
+    'LAGGING_SECTOR_RS_THRESHOLD': 95,  # Sector RS < 95 = lagging
+}
+
+# 2. BANK NIFTY VOLATILITY ADJUSTMENT
+BANK_NIFTY_VOLATILITY_ADJUSTMENT = True  # Set to True to enable (DEFAULT: OFF for testing)
+
+BANK_NIFTY_CONFIG = {
+    # Banking Stocks (Higher Volatility)
+    'BANKING_STOCKS': [
+        'HDFCBANK.NS', 'ICICIBANK.NS', 'SBIN.NS', 'KOTAKBANK.NS', 'AXISBANK.NS',
+        'INDUSINDBK.NS', 'BANKBARODA.NS', 'PNB.NS', 'CANBK.NS', 'UNIONBANK.NS',
+        'IDFCFIRSTB.NS', 'FEDERALBNK.NS', 'BANDHANBNK.NS', 'AUBANK.NS'
+    ],
+    
+    # Volatility Adjustments for Banking Stocks
+    'STOP_LOSS_MULTIPLIER': 1.5,  # 1.5x wider stops (4% → 6%)
+    'POSITION_SIZE_MULTIPLIER': 0.75,  # 75% of normal position size
+    'QUALITY_THRESHOLD_BOOST': 10,  # Require 10 points higher quality (60 → 70)
+    'MIN_SCORE_BOOST': 0.3,  # Require 0.3 higher score (7.0 → 7.3)
+    
+    # Rationale: Bank Nifty is 1.5-1.7x more volatile than Nifty 50
+    # Wider stops prevent premature exits, smaller size manages risk
+}
+
+# ═══════════════════════════════════════════════════════════════
+# 🎯 PROFESSIONAL TRADING PATTERNS (Optional Enhancements)
+# ═══════════════════════════════════════════════════════════════
+
+# 3. MINERVINI VCP (Volatility Contraction Pattern)
+MINERVINI_VCP_ENABLED = True   # Set to True to enable (DEFAULT: OFF for testing)
+
+MINERVINI_VCP_CONFIG = {
+    # VCP Detection Parameters
+    'MIN_CONSOLIDATION_WEEKS': 4,  # Minimum 4 weeks consolidation (relaxed from 7)
+    'MAX_CONSOLIDATION_WEEKS': 20,  # Maximum 20 weeks
+    'CONTRACTION_THRESHOLD': 0.7,  # Each phase should be 70% of previous range
+    'MIN_PHASES': 2,  # Minimum 2 contraction phases (relaxed from 3)
+    'VOLUME_DRYUP_THRESHOLD': 0.8,  # Volume should drop to 80% of average
+    'BREAKOUT_VOLUME_SURGE': 1.3,  # Breakout volume should be 1.3x average (relaxed from 2x)
+    
+    # Score Boost (Enhancement, not filter!)
+    'VCP_SCORE_BOOST': 0.8,  # Add 0.8 to signal score if VCP detected
+    'PARTIAL_VCP_BOOST': 0.4,  # Add 0.4 if partial VCP (2 of 3 criteria met)
+    
+    # Rationale: VCP catches stocks BEFORE explosive breakouts
+    # Using as enhancement (not filter) to avoid being too strict
+}
+
+# 4. O'NEIL PIVOT POINT BREAKOUT
+ONEIL_PIVOT_ENABLED = True  # Set to True to enable (DEFAULT: OFF for testing)
+
+ONEIL_PIVOT_CONFIG = {
+    # Pivot Detection Parameters
+    'MIN_BASE_WEEKS': 5,  # Minimum 5 weeks base (relaxed from 7)
+    'MAX_BASE_WEEKS': 30,  # Maximum 30 weeks
+    'BASE_DEPTH_MAX': 0.25,  # Base depth max 25% (relaxed from 20%)
+    'TIGHT_AREA_THRESHOLD': 0.05,  # Price within 5% range = tight
+    'PIVOT_VOLUME_SURGE': 1.4,  # Breakout volume 1.4x average (relaxed from 1.5x)
+    'ABOVE_MA50_REQUIRED': True,  # Must be above 50-day MA
+    
+    # Score Boost (Enhancement, not filter!)
+    'PIVOT_SCORE_BOOST': 0.7,  # Add 0.7 to signal score if pivot breakout
+    'PARTIAL_PIVOT_BOOST': 0.3,  # Add 0.3 if partial pivot (base formed, waiting for breakout)
+    
+    # Rationale: O'Neil's pivot catches institutional accumulation
+    # Using as enhancement (not filter) to avoid being too strict
+}
 
 # Signal Weights
 WEIGHTS = {
@@ -214,10 +388,15 @@ SIGNAL_PRICE_MOVE_THRESHOLD = 0.01  # Reject if price moved >1% since signal
 # 📈 STRATEGY SETTINGS
 # ═══════════════════════════════════════════════════════════════
 
-# Swing Trading (3-7 days) - FAST PROFIT in 5 days, 2 days buffer (30% capital)
-SWING_HOLD_DAYS_MIN = 3
-SWING_HOLD_DAYS_MAX = 7  # Exit after 7 days max (target 5 days for profit)
-SWING_ENABLED = True  # ENABLED - ULTRA STRICT: score ≥8.5, ADX ≥35, RSI 50-70, Volume 2x
+# Swing Trading - ONE DAY TRADER (INTRADAY ONLY - same day exits)
+# Strategy: Catch stocks ABOUT TO move 1.0-2.0% within same day, close all positions before 3:30 PM
+# Key difference: Lower ADX (12-25), focused RSI (42-68), short-term momentum
+# NOT looking for strong trends (those go to positional), looking for quick intraday moves
+# OPTIMIZED FOR: 50-60 trades/month, 60%+ win rate, 1.0-2.0% profit per trade (same day)
+# IMPORTANT: ALL positions exit same day - NO overnight holds (force exit at 3:25 PM)
+SWING_HOLD_DAYS_MIN = 1  # Same day exit only (intraday trader)
+SWING_HOLD_DAYS_MAX = 1  # Same day exit only (intraday trader) - NOTE: Code forces exit at 3:25 PM regardless
+SWING_ENABLED = True  # ENABLED - OPTIMIZED FOR INTRADAY: score ≥5.5, ADX 12-25, RSI 42-68, Volume ≥0.8x (stocks ABOUT TO move same day)
 
 # Positional Trading (INTERMEDIATE) - High quality setups, faster exits
 POSITIONAL_HOLD_DAYS_MIN = 5  # Minimum 5 days (was 10)
@@ -285,7 +464,15 @@ POST_MARKET_SCAN_TIME = '15:45'
 
 # Scanning Intervals
 SCAN_INTERVAL_MINUTES = 10  # Scan every 10 minutes during market hours (safer for API limits)
-POSITION_MONITOR_INTERVAL = 5  # Monitor positions every 5 minutes
+POSITION_MONITOR_INTERVAL = 5  # Monitor positions every 5 minutes (legacy - use strategy-specific below)
+SWING_MONITOR_INTERVAL = 1  # Swing/Intraday: Monitor positions every 1 minute (ultra-fast for intraday)
+POSITIONAL_MONITOR_INTERVAL = 2  # Positional: Monitor positions every 2 minutes (faster monitoring for better exits)
+
+# INTRADAY TIME-BASED EXITS (Swing/Intraday only)
+INTRADAY_PROFIT_EXIT_TIME = "15:00"  # 3:00 PM - Exit all profitable positions
+INTRADAY_BREAKEVEN_EXIT_TIME = "15:15"  # 3:15 PM - Exit all positions at breakeven (if in small loss)
+INTRADAY_FORCE_EXIT_TIME = "15:25"  # 3:25 PM - Force exit ALL remaining positions (no overnight risk)
+INTRADAY_ENTRY_CUTOFF_TIME = "14:00"  # 2:00 PM - Last entry time (allows 1.5 hours for exit)
 
 # ═══════════════════════════════════════════════════════════════
 # 💾 DATA & CACHING
@@ -366,8 +553,8 @@ SECTORS = {
 }
 
 print("✅ INTERMEDIATE Positional Trading System - Configuration Loaded")
-print(f"📊 Strategy: 70% Positional (5-14 days) + 30% Swing STRICT (score ≥8.0, ADX ≥30)")
-print(f"🎯 Signal Scores: Positional ≥{MIN_SIGNAL_SCORE}/10, Swing ≥{MIN_SWING_SIGNAL_SCORE}/10")
+print(f"📊 Strategy: 70% Positional (5-14 days) + 30% Swing HIGH-FREQ (score ≥{MIN_SWING_SIGNAL_SCORE}, ADX ≥{ADX_MIN_TREND})")
+print(f"🎯 Signal Scores: Positional ≥{MIN_SIGNAL_SCORE}/10, Swing ≥{MIN_SWING_SIGNAL_SCORE}/10 (1-2% quick profits, frequent trades)")
 print(f"💰 Capital Split: ₹{INITIAL_CAPITAL * 0.70:,.0f} Positional + ₹{INITIAL_CAPITAL * 0.30:,.0f} Swing")
 print(f"📈 Max Positions: {MAX_POSITIONS} per portfolio (₹10k each)")
 print(f"📱 Discord: {'✅' if DISCORD_ENABLED else '❌'} • ML: {'✅' if LSTM_ENABLED else '❌'} • Paper Trading: {'✅' if PAPER_TRADING_ENABLED else '❌'}")

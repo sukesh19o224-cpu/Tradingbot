@@ -1,0 +1,18 @@
+{
+  "capital": 50115.78,
+  "positions": {},
+  "performance": {
+    "total_trades": 18,
+    "winning_trades": 8,
+    "losing_trades": 5,
+    "total_pnl": 115.78,
+    "best_trade": 324.84,
+    "worst_trade": -207.9,
+    "total_charges": 65.21,
+    "gross_pnl": 180.99
+  },
+  "start_date": "2025-12-12T00:00:00.000000",
+  "last_updated": "2025-12-12T11:00:38.981524",
+  "initial_capital": 50000,
+  "mode": "PAPER_TRADING"
+}

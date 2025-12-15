@@ -34,12 +34,12 @@ class EnhancedDataFetcher:
     Uses most reliable yfinance periods to avoid API errors.
     """
 
-    def __init__(self, api_delay: float = 0.3):
+    def __init__(self, api_delay: float = 0.08):
         """
         Initialize enhanced data fetcher
 
         Args:
-            api_delay: Delay in seconds between API calls (0.3s = safe)
+            api_delay: Delay in seconds between API calls (0.08s = very fast, monitor rate limits)
         """
         self.api_delay = api_delay
         self.daily_period = '75d'  # 75 days daily data (~52 trading days, enough for 50-MA)
@@ -49,15 +49,18 @@ class EnhancedDataFetcher:
             'successful': 0,
             'failed': 0,
             'daily_fetched': 0,
-            'intraday_fetched': 0
+            'intraday_fetched': 0,
+            'rate_limits': 0,  # Track rate limit hits
+            'retries': 0  # Track retry attempts
         }
 
-    def get_stock_data_dual(self, symbol: str) -> Dict:
+    def get_stock_data_dual(self, symbol: str, verbose: bool = True) -> Dict:
         """
         Fetch BOTH daily and 15-minute data for a stock
 
         Args:
             symbol: Stock symbol (e.g., 'RELIANCE.NS')
+            verbose: Show fetch failures (default: True)
 
         Returns:
             Dict with keys:
@@ -77,7 +80,7 @@ class EnhancedDataFetcher:
 
         try:
             # STEP 1: Fetch 75 days DAILY data (CRITICAL!)
-            daily_df = self._fetch_daily_data(symbol)
+            daily_df = self._fetch_daily_data(symbol, verbose=verbose)
 
             if daily_df is not None and not daily_df.empty and len(daily_df) >= 30:
                 # Normalize column names (handle market open/closed variations)
@@ -87,19 +90,23 @@ class EnhancedDataFetcher:
             else:
                 # No daily data = skip this stock
                 self.stats['failed'] += 1
+                if verbose:
+                    print(f"   ⚠️ {symbol}: Failed to fetch daily data")
                 return result
 
-            # Small delay before next request
-            time.sleep(self.api_delay)
+            # Small delay before intraday request (reduced - same stock, faster)
+            time.sleep(self.api_delay * 0.5)  # 50% of delay (same stock = less risk)
 
             # STEP 2: Fetch today's 15-MINUTE data (for intraday signals)
-            intraday_df = self._fetch_intraday_data(symbol)
+            intraday_df = self._fetch_intraday_data(symbol, verbose=verbose)
 
             if intraday_df is not None and not intraday_df.empty:
                 # Normalize column names
                 intraday_df = self._normalize_columns(intraday_df)
                 result['intraday'] = intraday_df
                 self.stats['intraday_fetched'] += 1
+            elif verbose:
+                print(f"   ⚠️ {symbol}: Intraday data unavailable (market closed or no data)")
 
             # Success if we got at least daily data
             result['success'] = True
@@ -107,18 +114,23 @@ class EnhancedDataFetcher:
 
         except Exception as e:
             self.stats['failed'] += 1
-            # Silent fail (no console spam)
-            pass
+            if verbose:
+                error_msg = str(e).lower()
+                if 'rate limit' in error_msg or 'too many requests' in error_msg:
+                    print(f"   🚨 {symbol}: RATE LIMIT HIT - Too fast! Consider increasing delay")
+                else:
+                    print(f"   ❌ {symbol}: Fetch error - {str(e)[:50]}")
 
         return result
 
-    def _fetch_daily_data(self, symbol: str, max_retries: int = 2) -> Optional[pd.DataFrame]:
+    def _fetch_daily_data(self, symbol: str, max_retries: int = 2, verbose: bool = True) -> Optional[pd.DataFrame]:
         """
         Fetch 60-90 days of DAILY data (configurable)
 
         Args:
             symbol: Stock symbol
             max_retries: Number of retry attempts
+            verbose: Show retry attempts
 
         Returns:
             DataFrame with daily OHLCV data
@@ -126,6 +138,8 @@ class EnhancedDataFetcher:
         for attempt in range(max_retries):
             try:
                 if attempt > 0:
+                    if verbose:
+                        print(f"   🔄 {symbol}: Retrying daily data fetch (attempt {attempt + 1}/{max_retries})")
                     time.sleep(1.0)  # Wait 1s before retry
 
                 ticker = yf.Ticker(symbol)
@@ -136,18 +150,26 @@ class EnhancedDataFetcher:
                 if not df.empty and len(df) >= 30:  # Need at least 30 days
                     return df
 
-            except Exception:
+            except Exception as e:
+                error_msg = str(e).lower()
+                if 'rate limit' in error_msg or 'too many requests' in error_msg or '429' in error_msg or 'forbidden' in error_msg:
+                    self.stats['rate_limits'] += 1
+                    if verbose and attempt == max_retries - 1:  # Only show on final failure
+                        print(f"   🚨 {symbol}: RATE LIMIT on daily fetch - Too fast! (Total rate limits: {self.stats['rate_limits']})")
+                if attempt > 0:
+                    self.stats['retries'] += 1
                 continue
 
         return None
 
-    def _fetch_intraday_data(self, symbol: str, max_retries: int = 2) -> Optional[pd.DataFrame]:
+    def _fetch_intraday_data(self, symbol: str, max_retries: int = 2, verbose: bool = True) -> Optional[pd.DataFrame]:
         """
         Fetch today's 15-MINUTE data (1 day only - most reliable)
 
         Args:
             symbol: Stock symbol
             max_retries: Number of retry attempts
+            verbose: Show retry attempts
 
         Returns:
             DataFrame with 15-min OHLCV data
@@ -155,6 +177,8 @@ class EnhancedDataFetcher:
         for attempt in range(max_retries):
             try:
                 if attempt > 0:
+                    if verbose:
+                        print(f"   🔄 {symbol}: Retrying intraday data fetch (attempt {attempt + 1}/{max_retries})")
                     time.sleep(1.0)  # Wait 1s before retry
 
                 ticker = yf.Ticker(symbol)
@@ -167,7 +191,14 @@ class EnhancedDataFetcher:
                     # If market closed, returns last available candles
                     return df
 
-            except Exception:
+            except Exception as e:
+                error_msg = str(e).lower()
+                if 'rate limit' in error_msg or 'too many requests' in error_msg or '429' in error_msg or 'forbidden' in error_msg:
+                    self.stats['rate_limits'] += 1
+                    if verbose and attempt == max_retries - 1:  # Only show on final failure
+                        print(f"   🚨 {symbol}: RATE LIMIT on intraday fetch - Too fast! (Total rate limits: {self.stats['rate_limits']})")
+                if attempt > 0:
+                    self.stats['retries'] += 1
                 continue
 
         return None
@@ -214,7 +245,14 @@ class EnhancedDataFetcher:
 
     def get_current_price(self, symbol: str) -> float:
         """
-        Get current/latest price for a stock
+        Get current/latest LIVE price for a stock (ULTRA-ACCURATE)
+        
+        Uses multiple methods in priority order to get the MOST current price:
+        1. fast_info.lastPrice (real-time during market hours - MOST ACCURATE)
+        2. fast_info.regularMarketPrice (alternative real-time price)
+        3. Intraday data (1m - most recent candle - very current)
+        4. Intraday data (5m - fallback)
+        5. Daily data (fallback - last close)
 
         Args:
             symbol: Stock symbol
@@ -224,10 +262,49 @@ class EnhancedDataFetcher:
         """
         try:
             ticker = yf.Ticker(symbol)
-            data = ticker.history(period='1d', interval='1d')
-
-            if not data.empty:
-                return float(data['Close'].iloc[-1])
+            
+            # Method 1: Try fast_info.lastPrice (REAL-TIME - most accurate during market hours)
+            try:
+                fast_info = ticker.fast_info
+                # Try lastPrice first (most current)
+                if hasattr(fast_info, 'lastPrice') and fast_info.lastPrice and fast_info.lastPrice > 0:
+                    return float(fast_info.lastPrice)
+                # Try regularMarketPrice as alternative
+                if hasattr(fast_info, 'regularMarketPrice') and fast_info.regularMarketPrice and fast_info.regularMarketPrice > 0:
+                    return float(fast_info.regularMarketPrice)
+            except:
+                pass
+            
+            # Method 2: Try intraday data (1-minute - MOST RECENT candle)
+            try:
+                # 1-minute data is most current (updates every minute)
+                intraday_data = ticker.history(period='1d', interval='1m')
+                if not intraday_data.empty and len(intraday_data) > 0:
+                    latest_price = float(intraday_data['Close'].iloc[-1])
+                    if latest_price > 0:
+                        return latest_price
+            except:
+                pass
+            
+            # Method 3: Fallback to 5-minute data
+            try:
+                intraday_data = ticker.history(period='1d', interval='5m')
+                if not intraday_data.empty and len(intraday_data) > 0:
+                    latest_price = float(intraday_data['Close'].iloc[-1])
+                    if latest_price > 0:
+                        return latest_price
+            except:
+                pass
+            
+            # Method 4: Fallback to daily data (last close - when market closed)
+            try:
+                daily_data = ticker.history(period='1d', interval='1d')
+                if not daily_data.empty and len(daily_data) > 0:
+                    latest_price = float(daily_data['Close'].iloc[-1])
+                    if latest_price > 0:
+                        return latest_price
+            except:
+                pass
 
             return 0
 

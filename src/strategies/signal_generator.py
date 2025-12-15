@@ -92,20 +92,12 @@ class SignalGenerator:
             signal_classification = technical_result.get('signal_type', 'MOMENTUM')
 
             if trade_type == 'SWING':
-                # SWING: Use config values (NO HARDCODED DUPLICATES)
-                if signal_classification == 'MEAN_REVERSION':
-                    # Mean reversion swing: Use config stop loss
-                    targets = self._calculate_targets(entry_price, [0.04, 0.07, 0.10])
-                    stop_loss = entry_price * (1 - SWING_STOP_LOSS)  # From config
-                elif signal_classification == 'BREAKOUT':
-                    # Breakout swing: Use config stop loss
-                    targets = self._calculate_targets(entry_price, [0.05, 0.08, 0.12])
-                    stop_loss = entry_price * (1 - SWING_STOP_LOSS)  # From config
-                else:  # MOMENTUM
-                    # Momentum swing: Use config stop loss
-                    targets = self._calculate_targets(entry_price, [0.04, 0.07, 0.10])
-                    stop_loss = entry_price * (1 - SWING_STOP_LOSS)  # From config
-                hold_days = (SWING_HOLD_DAYS_MIN + SWING_HOLD_DAYS_MAX) // 2
+                # SWING: ONE DAY TRADER (INTRADAY ONLY - same day exits, 0.8-2.5% quick profits)
+                from config.settings import SWING_TARGETS, SWING_STOP_LOSS, SWING_HOLD_DAYS_MIN, SWING_HOLD_DAYS_MAX
+                # All swing signals use same targets (0.8%, 1.5%, 2.5%) for quick intraday profit-taking
+                targets = self._calculate_targets(entry_price, SWING_TARGETS)
+                stop_loss = entry_price * (1 - SWING_STOP_LOSS)  # From config (1.0% - ultra-tight)
+                hold_days = 1  # ONE DAY TRADER - same day exit only (force exit at 3:25 PM)
             else:  # POSITIONAL
                 # For positional trades, use strategy-specific config
                 if signal_classification == 'MEAN_REVERSION':
@@ -185,15 +177,18 @@ class SignalGenerator:
             if signal_score < min_required_score:
                 return None  # Score too low for this trade type
             
-            # ADDITIONAL SWING VALIDATION: Double-check 5-day profit criteria
+            # ADDITIONAL SWING VALIDATION: Relaxed for quick 5-day profits
+            # Note: Detailed filtering happens in _is_swing_setup() with strategy-specific requirements
+            # This is just a basic check - very relaxed for quick profits
             if trade_type == 'SWING':
                 rsi = signal.get('rsi', 0)
                 adx = signal.get('adx', 0)
                 volume_ratio = signal.get('volume_ratio', 1.0)
                 
-                # Must meet ALL swing criteria for 5-day profit potential
-                if not (50 <= rsi <= 70 and adx >= 35 and volume_ratio >= 2.0):
-                    print(f"   ⚠️ {symbol}: Swing rejected (RSI:{rsi:.1f}, ADX:{adx:.1f}, Vol:{volume_ratio:.1f}x)")
+                # Basic validation - very relaxed for quick profits
+                # Allow wider range - strategy-specific filters will handle requirements
+                if adx < 12 or rsi < 25 or rsi > 80 or volume_ratio < 1.2:
+                    # Too weak - reject
                     return None
             
             return signal
@@ -252,25 +247,41 @@ class SignalGenerator:
         Determine if this should be a SWING or POSITIONAL trade
 
         Criteria:
-        - SWING (5-day profit): RSI 50-70, ADX ≥35, Volume ≥2x, Strong momentum
+        - SWING (1-2% quick profit): Short-term momentum, volume spike, about to move
         - POSITIONAL: Strong trends, Elliott Wave impulse, long-term momentum
         """
         try:
-            # SWING QUALIFICATION (ULTRA STRICT - 5-day profit potential)
+            # SWING QUALIFICATION (OPTIMIZED FOR 1-2% QUICK MOVES)
             rsi = technical.get('rsi', 0)
             adx = technical.get('adx', 0)
             volume_ratio = technical.get('volume_ratio', 1.0)
+            price = technical.get('price', 0)
+            macd_signal = technical.get('signals', {}).get('macd_signal', '')
+            momentum_5d = technical.get('momentum_5d', 0)
+            momentum_1d = technical.get('momentum_1d', 0) if technical.get('momentum_1d') is not None else 0
             
-            # SWING must meet ALL these criteria for 5-day profit:
-            # 1. RSI 50-70: Strong momentum but not overbought
-            # 2. ADX ≥35: Explosive trend strength
-            # 3. Volume ≥2x: Strong buying pressure
-            # 4. MACD bullish crossover: Recent momentum shift
+            # SWING criteria for 1-2% quick moves (stocks ABOUT TO move, not already moved):
+            # 1. RSI 42-68: Good momentum but room to move (not exhausted, not too weak)
+            # 2. ADX 12-25: Some trend but not too strong (strong trends already moved)
+            # 3. Volume spike OR positive momentum: Interest building or just started
+            # 4. Short-term momentum positive: Price just started moving up
+            # 5. MACD bullish OR momentum building: Recent momentum shift
+            
+            # Check for quick momentum scenarios
+            rsi_ok = 42 <= rsi <= 68  # Sweet spot for 1-2% moves
+            adx_ok = 12 <= adx <= 25  # Some trend, not exhausted
+            volume_ok = volume_ratio >= 0.8  # Any volume activity
+            momentum_ok = momentum_1d > -0.5 or momentum_5d > -1.0  # Not falling fast
+            macd_ok = macd_signal in ['BULLISH', 'BULLISH_CROSSOVER'] or momentum_1d > 0.3
+            
+            # SWING: MOMENTUM ONLY - No mean reversion or breakout for swing
+            # Focus purely on momentum for 1-2% quick moves
+            
             swing_qualified = (
-                50 <= rsi <= 70 and
-                adx >= 35 and
-                volume_ratio >= 2.0 and
-                technical.get('signals', {}).get('macd_signal') == 'BULLISH'
+                rsi_ok and
+                adx_ok and
+                volume_ok and
+                (momentum_ok or macd_ok)  # Momentum indicators only (no mean reversion)
             )
             
             if swing_qualified and SWING_ENABLED:

@@ -1,0 +1,16 @@
+{
+  "capital": 50161.17620202636,
+  "positions": {},
+  "performance": {
+    "total_trades": 10,
+    "winning_trades": 3,
+    "losing_trades": 4,
+    "total_pnl": 161.17620202636735,
+    "best_trade": 323.01059570312447,
+    "worst_trade": -207.900000000001
+  },
+  "start_date": "2025-12-12T00:00:00.000000",
+  "last_updated": "2025-12-12T11:00:38.981524",
+  "initial_capital": 50000,
+  "mode": "PAPER_TRADING"
+}

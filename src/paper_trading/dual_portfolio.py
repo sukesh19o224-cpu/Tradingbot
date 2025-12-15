@@ -96,7 +96,7 @@ class DualPortfolio:
         # Smart replacement will handle capital/position limits automatically
         return self.positional_portfolio.execute_signal(signal)
 
-    def monitor_swing_positions(self, current_prices: Dict[str, float]) -> List[Dict]:
+    def monitor_swing_positions(self, current_prices: Dict[str, float]) -> tuple[List[Dict], List[Dict]]:
         """
         Monitor swing trading positions
 
@@ -106,11 +106,11 @@ class DualPortfolio:
             current_prices: Dict of {symbol: current_price}
 
         Returns:
-            List of exit signals
+            Tuple of (exit signals, trailing stop activations)
         """
         return self.swing_portfolio.check_exits(current_prices)
 
-    def monitor_positional_positions(self, current_prices: Dict[str, float]) -> List[Dict]:
+    def monitor_positional_positions(self, current_prices: Dict[str, float]) -> tuple[List[Dict], List[Dict]]:
         """
         Monitor positional trading positions
 
@@ -120,7 +120,7 @@ class DualPortfolio:
             current_prices: Dict of {symbol: current_price}
 
         Returns:
-            List of exit signals
+            Tuple of (exit signals, trailing stop activations)
         """
         return self.positional_portfolio.check_exits(current_prices)
 

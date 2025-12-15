@@ -18,7 +18,7 @@ st.set_page_config(
     page_title="Trading Portfolio Dashboard",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # Custom CSS
@@ -31,7 +31,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-@st.cache_data(ttl=10)  # Cache for 10 seconds only (more frequent updates)
+@st.cache_data(ttl=3)  # Cache for 3 seconds only (ultra-real-time price updates)
 def get_current_prices(symbols):
     """Fetch current prices for all symbols"""
     try:
@@ -61,31 +61,36 @@ def get_current_prices(symbols):
         return {}
 
 
+@st.cache_data(ttl=2)  # Cache for 2 seconds - ensures fresh data while reducing file reads
 def load_portfolio_data():
     """Load portfolio data from JSON files"""
     try:
         # Load swing portfolio
         swing_data = {}
-        if os.path.exists('data/swing_portfolio.json'):
-            with open('data/swing_portfolio.json', 'r') as f:
+        swing_file = 'data/swing_portfolio.json'
+        if os.path.exists(swing_file):
+            with open(swing_file, 'r') as f:
                 swing_data = json.load(f)
 
         # Load positional portfolio
         positional_data = {}
-        if os.path.exists('data/positional_portfolio.json'):
-            with open('data/positional_portfolio.json', 'r') as f:
+        positional_file = 'data/positional_portfolio.json'
+        if os.path.exists(positional_file):
+            with open(positional_file, 'r') as f:
                 positional_data = json.load(f)
 
         # Load swing trades
         swing_trades = []
-        if os.path.exists('data/swing_trades.json'):
-            with open('data/swing_trades.json', 'r') as f:
+        swing_trades_file = 'data/swing_trades.json'
+        if os.path.exists(swing_trades_file):
+            with open(swing_trades_file, 'r') as f:
                 swing_trades = json.load(f)
 
         # Load positional trades
         positional_trades = []
-        if os.path.exists('data/positional_trades.json'):
-            with open('data/positional_trades.json', 'r') as f:
+        positional_trades_file = 'data/positional_trades.json'
+        if os.path.exists(positional_trades_file):
+            with open(positional_trades_file, 'r') as f:
                 positional_trades = json.load(f)
 
         return {
@@ -143,10 +148,20 @@ def display_portfolio_summary(data, current_prices):
     positional_portfolio_value = positional_capital + positional_current_value
     total_portfolio_value = total_cash + total_current_value
 
-    # Calculate realized P&L from closed trades
+    # Calculate realized P&L from closed trades only (exited positions)
     swing_trades = data.get('swing_trades', [])
     positional_trades = data.get('positional_trades', [])
-    realized_pnl = sum(t.get('pnl', 0) for t in swing_trades) + sum(t.get('pnl', 0) for t in positional_trades)
+    
+    # Get open positions to filter them out
+    swing_open_symbols = set(swing.get('positions', {}).keys())
+    positional_open_symbols = set(positional.get('positions', {}).keys())
+    
+    # Only count trades that have exited (have exit_date AND symbol not in open positions)
+    # Store these for use throughout the function
+    swing_realized_trades = [t for t in swing_trades if t.get('exit_date') and t.get('symbol') not in swing_open_symbols]
+    positional_realized_trades = [t for t in positional_trades if t.get('exit_date') and t.get('symbol') not in positional_open_symbols]
+    
+    realized_pnl = sum(t.get('pnl', 0) for t in swing_realized_trades) + sum(t.get('pnl', 0) for t in positional_realized_trades)
 
     # Calculate total P&L (realized + unrealized)
     total_pnl = total_portfolio_value - total_initial
@@ -168,13 +183,39 @@ def display_portfolio_summary(data, current_prices):
     swing_pnl_pct = (swing_pnl / swing_initial * 100) if swing_initial > 0 else 0
     
     # Get swing trade stats
-    swing_trades = data.get('swing_trades', [])
-    swing_total_trades = len(swing_trades)
-    swing_wins = len([t for t in swing_trades if t.get('pnl', 0) > 0])
-    swing_losses = len([t for t in swing_trades if t.get('pnl', 0) < 0])
-    swing_win_rate = (swing_wins / swing_total_trades * 100) if swing_total_trades > 0 else 0
-    swing_realized_pnl = sum(t.get('pnl', 0) for t in swing_trades)
+    # CRITICAL FIX: Group trades by unique position (symbol + entry_date)
+    # Partial exits should count as 1 trade, not multiple
+    # Use swing_realized_trades already calculated in summary section above
+    swing_position_trades = {}
+    for trade in swing_realized_trades:
+        key = (trade.get('symbol', ''), trade.get('entry_date', ''))
+        if key not in swing_position_trades:
+            swing_position_trades[key] = []
+        swing_position_trades[key].append(trade)
+    
+    # Count unique positions (not individual trade records)
+    swing_total_trades = len(swing_position_trades)
+    # Use GROSS P&L for win/loss classification (preserves original win rate)
+    swing_wins = sum(1 for trades_list in swing_position_trades.values() 
+                     if sum(t.get('gross_pnl', t.get('pnl', 0)) for t in trades_list) > 0.01)  # > ₹0.01 = win (gross)
+    swing_losses = sum(1 for trades_list in swing_position_trades.values() 
+                       if sum(t.get('gross_pnl', t.get('pnl', 0)) for t in trades_list) < -0.01)  # < -₹0.01 = loss (gross)
+    swing_breakeven = swing_total_trades - swing_wins - swing_losses  # ≈ ₹0 = breakeven
+    
+    # Win rate excluding breakeven: wins / (wins + losses) * 100
+    swing_win_loss_total = swing_wins + swing_losses
+    swing_win_rate = (swing_wins / swing_win_loss_total * 100) if swing_win_loss_total > 0 else 0
+    
+    swing_realized_pnl = sum(t.get('pnl', 0) for t in swing_realized_trades)
     swing_unrealized_pnl = swing_current_value - swing_invested
+    
+    # Calculate total trading charges for swing trades (detailed breakdown)
+    swing_total_charges = sum(t.get('trading_charges', 0) for t in swing_realized_trades)
+    swing_total_buy_charges = sum(t.get('buy_charges', 0) for t in swing_realized_trades)
+    swing_total_sell_charges = sum(t.get('sell_charges', 0) for t in swing_realized_trades)
+    swing_gross_pnl = swing_realized_pnl + swing_total_charges  # Gross P&L before charges
+    swing_charges_trades_count = len([t for t in swing_realized_trades if t.get('trading_charges', 0) > 0])
+    swing_avg_charges_per_trade = (swing_total_charges / swing_charges_trades_count) if swing_charges_trades_count > 0 else 0
 
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     
@@ -205,6 +246,54 @@ def display_portfolio_summary(data, current_prices):
     with col6:
         st.metric("📝 Total Trades", swing_total_trades)
         st.metric("✅ Win Rate", f"{swing_win_rate:.1f}%")
+    
+    # Trade Statistics Section
+    st.markdown("### 📊 Trade Statistics")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("✅ Wins", swing_wins)
+    with col2:
+        st.metric("❌ Losses", swing_losses)
+    with col3:
+        st.metric("⚖️ Win:Loss Ratio", f"{swing_wins}:{swing_losses}" if swing_losses > 0 else f"{swing_wins}:0")
+    with col4:
+        st.metric("➖ Breakeven", swing_breakeven)
+    
+    # Trading Charges Section (swing trades only) - ZERODHA STYLE
+    st.markdown("### 💰 Zerodha Trading Charges (Swing Trading)")
+    with st.container():
+        # Main charges card
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.markdown("**💰 Total Charges Spent**")
+            charges_color = "negative"
+            st.markdown(f"<span class='{charges_color} big-metric'>₹{swing_total_charges:,.2f}</span>",
+                       unsafe_allow_html=True)
+            st.caption(f"Across {swing_charges_trades_count} trades")
+        
+        with col2:
+            st.markdown("**📊 Charges Breakdown**")
+            st.write(f"Buy Charges: ₹{swing_total_buy_charges:,.2f}")
+            st.write(f"Sell Charges: ₹{swing_total_sell_charges:,.2f}")
+            if swing_charges_trades_count > 0:
+                st.caption(f"Avg per trade: ₹{swing_avg_charges_per_trade:,.2f}")
+        
+        with col3:
+            st.markdown("**📈 Gross P&L**")
+            gross_color = "positive" if swing_gross_pnl >= 0 else "negative"
+            st.markdown(f"<span class='{gross_color}'>₹{swing_gross_pnl:+,.2f}</span>",
+                       unsafe_allow_html=True)
+            st.caption("Before charges")
+        
+        with col4:
+            st.markdown("**✅ Net P&L**")
+            net_color = "positive" if swing_realized_pnl >= 0 else "negative"
+            st.markdown(f"<span class='{net_color}'>₹{swing_realized_pnl:+,.2f}</span>",
+                       unsafe_allow_html=True)
+            st.caption("After all charges")
+        
+        # Charges impact info
+        st.info(f"💰 **Charges Include:** STT (0.0125% on sell), Exchange Transaction Charges, GST (18%), Stamp Duty, SEBI Turnover Fees, NSE IPFT | **Impact:** Charges reduce your net P&L by ₹{swing_total_charges:,.2f} ({((swing_total_charges / swing_gross_pnl) * 100) if swing_gross_pnl != 0 else 0:.2f}% of gross P&L)" if swing_gross_pnl != 0 else f"💰 **Charges Include:** STT (0.0125% on sell), Exchange Transaction Charges, GST (18%), Stamp Duty, SEBI Turnover Fees, NSE IPFT")
 
     st.markdown("---")
 
@@ -217,12 +306,29 @@ def display_portfolio_summary(data, current_prices):
     positional_pnl_pct = (positional_pnl / positional_initial * 100) if positional_initial > 0 else 0
     
     # Get positional trade stats
-    positional_trades = data.get('positional_trades', [])
-    positional_total_trades = len(positional_trades)
-    positional_wins = len([t for t in positional_trades if t.get('pnl', 0) > 0])
-    positional_losses = len([t for t in positional_trades if t.get('pnl', 0) < 0])
-    positional_win_rate = (positional_wins / positional_total_trades * 100) if positional_total_trades > 0 else 0
-    positional_realized_pnl = sum(t.get('pnl', 0) for t in positional_trades)
+    # CRITICAL FIX: Group trades by unique position (symbol + entry_date)
+    # Partial exits should count as 1 trade, not multiple
+    # Use positional_realized_trades already calculated in summary section above
+    positional_position_trades = {}
+    for trade in positional_realized_trades:
+        key = (trade.get('symbol', ''), trade.get('entry_date', ''))
+        if key not in positional_position_trades:
+            positional_position_trades[key] = []
+        positional_position_trades[key].append(trade)
+    
+    # Count unique positions (not individual trade records)
+    positional_total_trades = len(positional_position_trades)
+    positional_wins = sum(1 for trades_list in positional_position_trades.values() 
+                          if sum(t.get('pnl', 0) for t in trades_list) > 0.01)  # > ₹0.01 = win
+    positional_losses = sum(1 for trades_list in positional_position_trades.values() 
+                            if sum(t.get('pnl', 0) for t in trades_list) < -0.01)  # < -₹0.01 = loss
+    positional_breakeven = positional_total_trades - positional_wins - positional_losses  # ≈ ₹0 = breakeven
+    
+    # Win rate excluding breakeven: wins / (wins + losses) * 100
+    positional_win_loss_total = positional_wins + positional_losses
+    positional_win_rate = (positional_wins / positional_win_loss_total * 100) if positional_win_loss_total > 0 else 0
+    
+    positional_realized_pnl = sum(t.get('pnl', 0) for t in positional_realized_trades)
     positional_unrealized_pnl = positional_current_value - positional_invested
 
     col1, col2, col3, col4, col5, col6 = st.columns(6)
@@ -254,6 +360,18 @@ def display_portfolio_summary(data, current_prices):
     with col6:
         st.metric("📝 Total Trades", positional_total_trades)
         st.metric("✅ Win Rate", f"{positional_win_rate:.1f}%")
+    
+    # Trade Statistics Section
+    st.markdown("### 📊 Trade Statistics")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("✅ Wins", positional_wins)
+    with col2:
+        st.metric("❌ Losses", positional_losses)
+    with col3:
+        st.metric("⚖️ Win:Loss Ratio", f"{positional_wins}:{positional_losses}" if positional_losses > 0 else f"{positional_wins}:0")
+    with col4:
+        st.metric("➖ Breakeven", positional_breakeven)
 
     st.markdown("---")
     
@@ -305,8 +423,8 @@ def display_open_positions(data, current_prices):
             shares = pos.get('shares', 0)
             initial_shares = pos.get('initial_shares', shares)
 
-            # Calculate P&L
-            invested = entry_price * shares
+            # Calculate P&L - Use actual cost from portfolio (more accurate)
+            invested = pos.get('cost', entry_price * shares)  # Use cost field if available
             current_value = current_price * shares
             pnl = current_value - invested
             pnl_pct = (pnl / invested * 100) if invested > 0 else 0
@@ -328,16 +446,52 @@ def display_open_positions(data, current_prices):
             else:
                 max_hold_days = pos.get('max_holding_days', 15)
 
-            # Calculate trailing stop (same logic as paper_trader.py)
-            initial_stop_loss = pos.get('stop_loss', 0)
-            current_stop_loss = initial_stop_loss
-            trailing_active = False
-
-            # Trailing stop activates at +5% profit
-            if pnl_pct >= 5.0:
-                # Trail stop at 3% below current price or breakeven, whichever is higher
-                trailing_stop = max(entry_price, current_price * 0.97)
-                if trailing_stop > initial_stop_loss:
+            # HYBRID TRAILING STOP (Breakeven + ATR-based) - Same logic as paper_trader.py
+            initial_stop_loss = pos.get('initial_stop_loss', pos.get('stop_loss', 0))
+            current_stop_loss = pos.get('stop_loss', initial_stop_loss)
+            breakeven_active = pos.get('breakeven_active', False)
+            trailing_active = pos.get('trailing_active', False)
+            
+            # Calculate what trailing stop should be (for display)
+            # CRITICAL FIX: Use strategy-specific settings (same as paper_trader.py)
+            from config.settings import TRAILING_STOP_ATR_MULTIPLIER, USE_ATR_STOP_LOSS
+            
+            # Strategy-specific thresholds (hardcoded like paper_trader.py)
+            if strategy == 'swing':
+                breakeven_threshold = 0.005  # +0.5% (swing)
+                trailing_threshold = 0.007  # +0.7% (swing)
+                swing_atr_multiplier = 0.5  # 0.5x ATR for swing
+                swing_trailing_distance = 0.005  # 0.5% fallback for swing
+            else:  # positional
+                breakeven_threshold = 0.02  # +2% (positional)
+                trailing_threshold = 0.03  # +3% (positional)
+                positional_atr_multiplier = TRAILING_STOP_ATR_MULTIPLIER  # 0.8x ATR for positional
+                positional_trailing_distance = 0.015  # 1.5% fallback for positional
+            
+            if pnl_pct >= breakeven_threshold * 100:
+                breakeven_stop = entry_price
+                if breakeven_stop > current_stop_loss:
+                    current_stop_loss = breakeven_stop
+                    breakeven_active = True
+            
+            if pnl_pct >= trailing_threshold * 100:
+                atr = pos.get('atr', 0)
+                if atr > 0 and USE_ATR_STOP_LOSS:
+                    # ATR-based trailing: Strategy-specific multiplier
+                    if strategy == 'swing':
+                        trailing_distance = atr * swing_atr_multiplier
+                    else:  # positional
+                        trailing_distance = atr * positional_atr_multiplier
+                    atr_trailing_stop = current_price - trailing_distance
+                    trailing_stop = max(entry_price, atr_trailing_stop)
+                else:
+                    # Fallback: Strategy-specific fixed trailing
+                    if strategy == 'swing':
+                        trailing_stop = max(entry_price, current_price * (1 - swing_trailing_distance))
+                    else:  # positional
+                        trailing_stop = max(entry_price, current_price * (1 - positional_trailing_distance))
+                
+                if trailing_stop > current_stop_loss:
                     current_stop_loss = trailing_stop
                     trailing_active = True
 
@@ -366,6 +520,7 @@ def display_open_positions(data, current_prices):
                 with col3:
                     st.write("**Current Status**")
                     st.write(f"Current Price: ₹{current_price:.2f}")
+                    st.write(f"Invested: ₹{invested:,.0f}")
                     st.write(f"Current Value: ₹{current_value:,.0f}")
                     st.markdown(f"**P&L:** <span class='{pnl_color}'>₹{pnl:+,.0f} ({pnl_pct:+.2f}%)</span>",
                                unsafe_allow_html=True)
@@ -375,16 +530,29 @@ def display_open_positions(data, current_prices):
                     st.write(f"Hold Days: {hold_days} / {max_hold_days}")
                     st.write(f"Target 1: ₹{pos.get('target1', 0):.2f}")
                     st.write(f"Target 2: ₹{pos.get('target2', 0):.2f}")
+                    st.write(f"Target 3: ₹{pos.get('target3', 0):.2f}")
 
                     # Show stop loss status (breakeven, trailing, or normal)
                     if trailing_active:
+                        atr = pos.get('atr', 0)
+                        if atr > 0:
+                            st.write(f"~~Initial Stop: ₹{initial_stop_loss:.2f}~~")
+                            st.markdown(f"**🔒 ATR Trailing Stop: ₹{current_stop_loss:.2f}** (Active! 1.5x ATR)")
+                        else:
+                            st.write(f"~~Initial Stop: ₹{initial_stop_loss:.2f}~~")
+                            st.markdown(f"**🔒 Trailing Stop: ₹{current_stop_loss:.2f}** (Active! 2% fixed)")
+                    elif breakeven_active or abs(current_stop_loss - entry_price) < 0.01:
                         st.write(f"~~Initial Stop: ₹{initial_stop_loss:.2f}~~")
-                        st.markdown(f"**🔒 Trailing Stop: ₹{current_stop_loss:.2f}** (Active!)")
-                    elif abs(current_stop_loss - entry_price) < 0.01:  # Stop at breakeven
-                        st.write(f"~~Initial Stop: ₹{initial_stop_loss:.2f}~~")
-                        st.markdown(f"**✅ Breakeven Stop: ₹{current_stop_loss:.2f}** (T1 Hit!)")
+                        # Calculate stop loss percentage for display
+                        stop_loss_pct = ((entry_price - current_stop_loss) / entry_price * 100) if entry_price > 0 else 0
+                        if abs(stop_loss_pct) < 0.01:  # At breakeven
+                            st.markdown(f"**✅ Breakeven Stop: ₹{current_stop_loss:.2f}** (Risk-Free! 0.00%)")
+                        else:
+                            st.markdown(f"**✅ Breakeven Stop: ₹{current_stop_loss:.2f}** (Risk-Free! {stop_loss_pct:.2f}%)")
                     else:
-                        st.write(f"Stop Loss: ₹{current_stop_loss:.2f}")
+                        # Calculate stop loss percentage
+                        stop_loss_pct = ((entry_price - current_stop_loss) / entry_price * 100) if entry_price > 0 else 0
+                        st.write(f"Stop Loss: ₹{current_stop_loss:.2f} ({stop_loss_pct:.2f}%)")
 
     # Positional positions
     if positional_positions:
@@ -397,8 +565,8 @@ def display_open_positions(data, current_prices):
             shares = pos.get('shares', 0)
             initial_shares = pos.get('initial_shares', shares)
 
-            # Calculate P&L
-            invested = entry_price * shares
+            # Calculate P&L - Use actual cost from portfolio (more accurate)
+            invested = pos.get('cost', entry_price * shares)  # Use cost field if available
             current_value = current_price * shares
             pnl = current_value - invested
             pnl_pct = (pnl / invested * 100) if invested > 0 else 0
@@ -420,16 +588,52 @@ def display_open_positions(data, current_prices):
             else:
                 max_hold_days = pos.get('max_holding_days', 45)
 
-            # Calculate trailing stop (same logic as paper_trader.py)
-            initial_stop_loss = pos.get('stop_loss', 0)
-            current_stop_loss = initial_stop_loss
-            trailing_active = False
-
-            # Trailing stop activates at +5% profit
-            if pnl_pct >= 5.0:
-                # Trail stop at 3% below current price or breakeven, whichever is higher
-                trailing_stop = max(entry_price, current_price * 0.97)
-                if trailing_stop > initial_stop_loss:
+            # HYBRID TRAILING STOP (Breakeven + ATR-based) - Same logic as paper_trader.py
+            initial_stop_loss = pos.get('initial_stop_loss', pos.get('stop_loss', 0))
+            current_stop_loss = pos.get('stop_loss', initial_stop_loss)
+            breakeven_active = pos.get('breakeven_active', False)
+            trailing_active = pos.get('trailing_active', False)
+            
+            # Calculate what trailing stop should be (for display)
+            # CRITICAL FIX: Use strategy-specific settings (same as paper_trader.py)
+            from config.settings import TRAILING_STOP_ATR_MULTIPLIER, USE_ATR_STOP_LOSS
+            
+            # Strategy-specific thresholds (hardcoded like paper_trader.py)
+            if strategy == 'swing':
+                breakeven_threshold = 0.005  # +0.5% (swing)
+                trailing_threshold = 0.007  # +0.7% (swing)
+                swing_atr_multiplier = 0.5  # 0.5x ATR for swing
+                swing_trailing_distance = 0.005  # 0.5% fallback for swing
+            else:  # positional
+                breakeven_threshold = 0.02  # +2% (positional)
+                trailing_threshold = 0.03  # +3% (positional)
+                positional_atr_multiplier = TRAILING_STOP_ATR_MULTIPLIER  # 0.8x ATR for positional
+                positional_trailing_distance = 0.015  # 1.5% fallback for positional
+            
+            if pnl_pct >= breakeven_threshold * 100:
+                breakeven_stop = entry_price
+                if breakeven_stop > current_stop_loss:
+                    current_stop_loss = breakeven_stop
+                    breakeven_active = True
+            
+            if pnl_pct >= trailing_threshold * 100:
+                atr = pos.get('atr', 0)
+                if atr > 0 and USE_ATR_STOP_LOSS:
+                    # ATR-based trailing: Strategy-specific multiplier
+                    if strategy == 'swing':
+                        trailing_distance = atr * swing_atr_multiplier
+                    else:  # positional
+                        trailing_distance = atr * positional_atr_multiplier
+                    atr_trailing_stop = current_price - trailing_distance
+                    trailing_stop = max(entry_price, atr_trailing_stop)
+                else:
+                    # Fallback: Strategy-specific fixed trailing
+                    if strategy == 'swing':
+                        trailing_stop = max(entry_price, current_price * (1 - swing_trailing_distance))
+                    else:  # positional
+                        trailing_stop = max(entry_price, current_price * (1 - positional_trailing_distance))
+                
+                if trailing_stop > current_stop_loss:
                     current_stop_loss = trailing_stop
                     trailing_active = True
 
@@ -458,6 +662,7 @@ def display_open_positions(data, current_prices):
                 with col3:
                     st.write("**Current Status**")
                     st.write(f"Current Price: ₹{current_price:.2f}")
+                    st.write(f"Invested: ₹{invested:,.0f}")
                     st.write(f"Current Value: ₹{current_value:,.0f}")
                     st.markdown(f"**P&L:** <span class='{pnl_color}'>₹{pnl:+,.0f} ({pnl_pct:+.2f}%)</span>",
                                unsafe_allow_html=True)
@@ -467,16 +672,29 @@ def display_open_positions(data, current_prices):
                     st.write(f"Hold Days: {hold_days} / {max_hold_days}")
                     st.write(f"Target 1: ₹{pos.get('target1', 0):.2f}")
                     st.write(f"Target 2: ₹{pos.get('target2', 0):.2f}")
+                    st.write(f"Target 3: ₹{pos.get('target3', 0):.2f}")
 
                     # Show stop loss status (breakeven, trailing, or normal)
                     if trailing_active:
+                        atr = pos.get('atr', 0)
+                        if atr > 0:
+                            st.write(f"~~Initial Stop: ₹{initial_stop_loss:.2f}~~")
+                            st.markdown(f"**🔒 ATR Trailing Stop: ₹{current_stop_loss:.2f}** (Active! 1.5x ATR)")
+                        else:
+                            st.write(f"~~Initial Stop: ₹{initial_stop_loss:.2f}~~")
+                            st.markdown(f"**🔒 Trailing Stop: ₹{current_stop_loss:.2f}** (Active! 2% fixed)")
+                    elif breakeven_active or abs(current_stop_loss - entry_price) < 0.01:
                         st.write(f"~~Initial Stop: ₹{initial_stop_loss:.2f}~~")
-                        st.markdown(f"**🔒 Trailing Stop: ₹{current_stop_loss:.2f}** (Active!)")
-                    elif abs(current_stop_loss - entry_price) < 0.01:  # Stop at breakeven
-                        st.write(f"~~Initial Stop: ₹{initial_stop_loss:.2f}~~")
-                        st.markdown(f"**✅ Breakeven Stop: ₹{current_stop_loss:.2f}** (T1 Hit!)")
+                        # Calculate stop loss percentage for display
+                        stop_loss_pct = ((entry_price - current_stop_loss) / entry_price * 100) if entry_price > 0 else 0
+                        if abs(stop_loss_pct) < 0.01:  # At breakeven
+                            st.markdown(f"**✅ Breakeven Stop: ₹{current_stop_loss:.2f}** (Risk-Free! 0.00%)")
+                        else:
+                            st.markdown(f"**✅ Breakeven Stop: ₹{current_stop_loss:.2f}** (Risk-Free! {stop_loss_pct:.2f}%)")
                     else:
-                        st.write(f"Stop Loss: ₹{current_stop_loss:.2f}")
+                        # Calculate stop loss percentage
+                        stop_loss_pct = ((entry_price - current_stop_loss) / entry_price * 100) if entry_price > 0 else 0
+                        st.write(f"Stop Loss: ₹{current_stop_loss:.2f} ({stop_loss_pct:.2f}%)")
 
 def display_trade_history(data):
     """Display recent trade history"""
@@ -485,21 +703,33 @@ def display_trade_history(data):
 
     swing_trades = data.get('swing_trades', [])
     positional_trades = data.get('positional_trades', [])
+    
+    # Only show realized (exited) trades in history
+    swing_open_symbols = set(data.get('swing', {}).get('positions', {}).keys())
+    positional_open_symbols = set(data.get('positional', {}).get('positions', {}).keys())
+    
+    swing_realized = [t for t in swing_trades if t.get('exit_date') and t.get('symbol') not in swing_open_symbols]
+    positional_realized = [t for t in positional_trades if t.get('exit_date') and t.get('symbol') not in positional_open_symbols]
 
     st.markdown("---")
-    st.subheader("📜 RECENT TRADES")
+    st.subheader("📜 RECENT TRADES (Closed Positions Only)")
 
-    if not swing_trades and not positional_trades:
-        st.info("No trades yet. Waiting for signals...")
+    if not swing_realized and not positional_realized:
+        st.info("No closed trades yet. Waiting for exits...")
         return
 
-    # Combine and sort by date
+    # Show total charges info if swing trades have charges
+    swing_charges_total = sum(t.get('trading_charges', 0) for t in swing_realized)
+    if swing_charges_total > 0:
+        st.info(f"💰 **Swing Trading Charges:** Total ₹{swing_charges_total:,.2f} deducted from {len([t for t in swing_realized if t.get('trading_charges', 0) > 0])} trades (Net P&L shown)")
+
+    # Combine and sort by date (only exited trades)
     all_trades = []
-    for trade in swing_trades:
+    for trade in swing_realized:
         trade['type'] = 'Swing'
         all_trades.append(trade)
 
-    for trade in positional_trades:
+    for trade in positional_realized:
         trade['type'] = 'Positional'
         all_trades.append(trade)
 
@@ -508,37 +738,62 @@ def display_trade_history(data):
 
     # Show last 10 trades
     for trade in all_trades[:10]:
-        col1, col2, col3, col4, col5, col6 = st.columns(6)
+        # Use 7 columns if swing trade has charges, otherwise 6
+        has_charges = trade.get('trading_charges', 0) > 0
+        num_cols = 7 if has_charges else 6
+        cols = st.columns(num_cols)
 
-        with col1:
+        with cols[0]:
             badge = "🔥" if trade['type'] == 'Swing' else "📈"
             st.write(f"{badge} **{trade.get('symbol', 'N/A').replace('.NS', '')}**")
 
-        with col2:
+        with cols[1]:
             st.write(f"Entry: ₹{trade.get('entry_price', 0):.2f}")
 
-        with col3:
+        with cols[2]:
             st.write(f"Exit: ₹{trade.get('exit_price', 0):.2f}")
 
-        with col4:
+        with cols[3]:
             pnl = trade.get('pnl', 0)
             pnl_class = "positive" if pnl > 0 else "negative"
-            st.markdown(f"<span class='{pnl_class}'>₹{pnl:+,.0f}</span>", unsafe_allow_html=True)
+            # Show "Net P&L" label for swing trades with charges
+            label = "Net P&L" if has_charges else "P&L"
+            st.markdown(f"**{label}:**")
+            st.markdown(f"<span class='{pnl_class}'>₹{pnl:+,.2f}</span>", unsafe_allow_html=True)
 
-        with col5:
+        with cols[4]:
             pnl_pct = trade.get('pnl_percent', 0)
             pnl_class = "positive" if pnl_pct > 0 else "negative"
+            st.markdown(f"**Gross %:**")
             st.markdown(f"<span class='{pnl_class}'>{pnl_pct:+.2f}%</span>", unsafe_allow_html=True)
 
-        with col6:
-            st.write(f"Exit: {trade.get('exit_date', 'N/A')}")
+        if has_charges:
+            with cols[5]:
+                charges = trade.get('trading_charges', 0)
+                st.markdown(f"**Charges:**")
+                st.markdown(f"<span class='negative'>₹{charges:.2f}</span>", unsafe_allow_html=True)
+                st.caption(f"B: ₹{trade.get('buy_charges', 0):.2f}, S: ₹{trade.get('sell_charges', 0):.2f}")
+            
+            with cols[6]:
+                exit_date = trade.get('exit_date', 'N/A')
+                if isinstance(exit_date, str) and 'T' in exit_date:
+                    exit_date = exit_date.split('T')[0]
+                st.write(f"**Exit Date:**")
+                st.write(exit_date)
+        else:
+            with cols[5]:
+                exit_date = trade.get('exit_date', 'N/A')
+                if isinstance(exit_date, str) and 'T' in exit_date:
+                    exit_date = exit_date.split('T')[0]
+                st.write(f"**Exit Date:**")
+                st.write(exit_date)
 
 def main():
     """Main dashboard function"""
     # Header with refresh controls
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.markdown("### 🔄 Auto-refresh: Every 5 seconds")
+        st.markdown("### 🔄 Auto-refresh: Every 3 seconds (Ultra Real-Time)")
     with col2:
         # Manual refresh button
         if st.button("🔄 Force Refresh", key="refresh_btn"):
@@ -577,8 +832,8 @@ def main():
     current_time = datetime.now().strftime("%d %b %Y, %I:%M:%S %p")
     st.caption(f"Last updated: {current_time} | Data refreshes automatically")
 
-    # Auto-refresh
-    time.sleep(5)
+    # Auto-refresh (faster for real-time prices)
+    time.sleep(3)
     st.rerun()
 
 if __name__ == "__main__":

@@ -349,9 +349,9 @@ class HybridDetector:
             'target3': target3,
             'stop_loss': stop_loss,
             'risk_reward_ratio': risk_reward,
-            'expected_holding': '1-7 days',
-            'max_holding_days': 7,  # Auto-exit after 7 days
-            'expected_return': 8.0,  # 8% target
+            'expected_holding': 'Same day (intraday only)',
+            'max_holding_days': 1,  # ONE DAY TRADER - same day exit only (force exit at 3:25 PM)
+            'expected_return': 2.5,  # 2.5% target (same day)
             'score': base_signal.get('score', 8.0),
             'timestamp': datetime.now().isoformat(),
 

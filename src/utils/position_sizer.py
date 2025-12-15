@@ -66,14 +66,18 @@ class PositionSizer:
         base_risk: float = MAX_RISK_PER_TRADE
     ) -> float:
         """
-        Calculate position size based on ATR volatility
-
-        Uses ATR to normalize risk across stocks with different volatility
+        Calculate position size based on ACTUAL stop loss distance
+        
+        CRITICAL FIX: Uses actual stop loss from signal (which is already ATR-adjusted)
+        instead of fixed ATR multiplier. This ensures risk normalization:
+        - Stock with 2% stop → Larger position (same risk)
+        - Stock with 6% stop → Smaller position (same risk)
+        - Result: Same ₹ risk per trade regardless of stop distance
 
         Args:
             portfolio_value: Total portfolio value
-            signal: Trading signal with entry/stop
-            df: Historical OHLCV data
+            signal: Trading signal with entry/stop (stop is already ATR-adjusted)
+            df: Historical OHLCV data (used for validation, not calculation)
             base_risk: Base risk per trade (default from settings)
 
         Returns:
@@ -83,34 +87,43 @@ class PositionSizer:
             entry_price = signal['entry_price']
             stop_loss = signal['stop_loss']
 
-            # Calculate ATR
-            atr = self.calculate_atr(df)
+            # CRITICAL: Use ACTUAL stop loss distance, not fixed ATR multiplier
+            # The stop_loss in signal is already ATR-adjusted (2-6% range)
+            # This ensures perfect risk normalization
+            risk_per_share = entry_price - stop_loss
 
-            if atr == 0:
-                # Fallback to stop-loss based sizing
-                return self._fallback_sizing(portfolio_value, entry_price, stop_loss, base_risk)
+            if risk_per_share <= 0:
+                # Invalid stop loss (above entry price)
+                return 0
 
-            # Risk amount (in rupees)
+            # Risk amount (in rupees) - this is what we want to risk per trade
             risk_amount = portfolio_value * base_risk
 
-            # Stop distance in ATR multiples
-            # Use 2 ATR as stop distance (common practice)
-            stop_distance_atr = atr * 2
-
-            # Shares to buy
-            shares = risk_amount / stop_distance_atr
+            # Calculate shares to buy: risk_amount / risk_per_share
+            # This ensures we risk exactly risk_amount regardless of stop distance
+            shares = risk_amount / risk_per_share
 
             # Position value
             position_value = shares * entry_price
 
-            # Cap at max position size
+            # Cap at max position size (20% of portfolio)
             max_position = portfolio_value * MAX_POSITION_SIZE
-            position_value = min(position_value, max_position)
+            
+            if position_value > max_position:
+                # Position exceeds max, cap it
+                position_value = max_position
+                # Recalculate shares with capped position
+                shares = int(position_value / entry_price)
+                if shares == 0:
+                    return 0
+                # Actual risk will be less than target, but that's okay
+                # (Better to have smaller position than exceed limits)
 
             return position_value
 
         except Exception as e:
             print(f"⚠️ Volatility sizing error: {e}")
+            # Fallback to simple stop-loss based sizing
             return self._fallback_sizing(portfolio_value, entry_price, stop_loss, base_risk)
 
     def _fallback_sizing(
@@ -172,7 +185,8 @@ class PositionSizer:
     def adjust_for_quality(
         self,
         position_size: float,
-        signal_score: float
+        signal_score: float,
+        strategy: str = 'positional'
     ) -> float:
         """
         Adjust position size based on signal quality
@@ -180,17 +194,28 @@ class PositionSizer:
         Args:
             position_size: Base position size
             signal_score: Signal score (0-10)
+            strategy: 'swing' or 'positional' - uses different thresholds
 
         Returns:
             Quality-adjusted position size
         """
-        if signal_score < 7.0:
-            return 0  # Skip low quality
-
-        # Linear multiplier: 0.5x at score 7, 1.0x at score 8, 1.5x at score 9, 2.0x at score 10
+        from config.settings import MIN_SIGNAL_SCORE, MIN_SWING_SIGNAL_SCORE
+        
+        # Different thresholds for swing vs positional
+        if strategy == 'swing':
+            min_score = MIN_SWING_SIGNAL_SCORE  # 5.5 for swing
+            if signal_score < min_score:
+                return 0  # Skip below swing threshold
+            # For swing: 0.5x at 5.5, 0.75x at 6.0, 1.0x at 6.5, 1.25x at 7.0
+            quality_multiplier = 0.5 + (signal_score - 5.5) * 0.5
+        else:
+            min_score = MIN_SIGNAL_SCORE  # 7.0 for positional
+            if signal_score < min_score:
+                return 0  # Skip below positional threshold
+            # For positional: 0.5x at 7, 1.0x at 8, 1.5x at 9, 2.0x at 10
         quality_multiplier = 0.5 + (signal_score - 7) * 0.5
+        
         quality_multiplier = min(quality_multiplier, 2.0)  # Cap at 2x
-
         return position_size * quality_multiplier
 
     def calculate_complete_position_size(
@@ -228,9 +253,10 @@ class PositionSizer:
         # Step 2: Drawdown adjustment
         size_after_drawdown = self.adjust_for_drawdown(base_size, current_drawdown)
 
-        # Step 3: Quality adjustment
+        # Step 3: Quality adjustment (with strategy-aware threshold)
         signal_score = signal.get('score', 7.0)
-        final_size = self.adjust_for_quality(size_after_drawdown, signal_score)
+        strategy = signal.get('strategy', 'positional')  # Get strategy type
+        final_size = self.adjust_for_quality(size_after_drawdown, signal_score, strategy)
 
         # Step 4: Don't exceed available capital
         final_size = min(final_size, available_capital)

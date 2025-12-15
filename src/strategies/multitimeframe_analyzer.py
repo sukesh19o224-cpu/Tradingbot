@@ -65,7 +65,7 @@ class MultiTimeframeAnalyzer:
             print(f"⚠️ Error analyzing {symbol}: {e}")
             return None
 
-    def analyze_stock(self, symbol: str, daily_df: pd.DataFrame, intraday_df: Optional[pd.DataFrame] = None) -> Optional[Dict]:
+    def analyze_stock(self, symbol: str, daily_df: pd.DataFrame, intraday_df: Optional[pd.DataFrame] = None, market_regime: Optional[str] = None) -> Optional[Dict]:
         """
         Perform multi-timeframe analysis with pre-fetched data
 
@@ -75,6 +75,7 @@ class MultiTimeframeAnalyzer:
             symbol: Stock symbol
             daily_df: Pre-fetched daily OHLCV data
             intraday_df: Pre-fetched 15-min OHLCV data (optional)
+            market_regime: Current market regime ('BULL', 'SIDEWAYS', 'BEAR') for adaptive classification
 
         Returns:
             Dictionary with analysis results or None
@@ -89,8 +90,8 @@ class MultiTimeframeAnalyzer:
             # Analyze 15-minute timeframe (entry/exit timing) if available
             intraday_analysis = self._analyze_intraday(intraday_df) if intraday_df is not None and len(intraday_df) > 10 else None
 
-            # Combine analyses
-            combined = self._combine_timeframes(daily_analysis, intraday_analysis)
+            # Combine analyses (pass market regime for adaptive classification)
+            combined = self._combine_timeframes(daily_analysis, intraday_analysis, market_regime=market_regime)
             combined['symbol'] = symbol
 
             return combined
@@ -204,6 +205,9 @@ class MultiTimeframeAnalyzer:
             'ema_20': indicators.get('ema_20', 0),
             'ema_50': ema_50,
             'ema_200': ema_200,
+            
+            # Return full indicators dict for downstream use
+            'indicators': indicators,
         }
 
     def _analyze_intraday(self, df: pd.DataFrame) -> Dict:
@@ -297,6 +301,40 @@ class MultiTimeframeAnalyzer:
         sustained_breakout = candles_above >= 2  # At least 2 out of 3 candles held
         
         return is_above_consolidation and sustained_breakout
+    
+    def _detect_daily_breakout(self, daily: Dict) -> bool:
+        """
+        Detect breakout on DAILY chart (NEW - catches daily breakouts)
+        
+        Breakout = Price breaking above recent 20-day high with volume
+        Industry standard: Price above 20-day high + volume surge
+        """
+        try:
+            # Simple check: RSI in breakout zone + good volume + price above resistance
+            rsi = daily.get('rsi', 50)
+            volume_ratio = daily.get('volume_ratio', 1.0)
+            price = daily.get('current_price', 0)
+            ema_20 = daily.get('ema_20', 0)
+            ema_50 = daily.get('ema_50', 0)
+            
+            # Breakout conditions:
+            # 1. Price above 20-MA (breaking above short-term resistance)
+            # 2. RSI 55-75 (momentum building, not overbought)
+            # 3. Volume 1.3x+ (volume surge)
+            if ema_20 > 0 and price > ema_20 * 1.01:  # 1% above 20-MA (breaking resistance)
+                if 55 <= rsi <= 75:  # Momentum zone
+                    if volume_ratio >= 1.3:  # Volume surge
+                        return True
+            
+            # Alternative: Price above 50-MA with strong momentum
+            if ema_50 > 0 and price > ema_50:
+                if 60 <= rsi <= 70:  # Strong momentum
+                    if volume_ratio >= 1.5:  # Strong volume
+                        return True
+            
+            return False
+        except Exception:
+            return False
 
     def _check_momentum(self, df: pd.DataFrame) -> bool:
         """Check if momentum is weakening"""
@@ -309,7 +347,7 @@ class MultiTimeframeAnalyzer:
 
         return momentum_weakening
 
-    def _combine_timeframes(self, daily: Dict, intraday: Optional[Dict]) -> Dict:
+    def _combine_timeframes(self, daily: Dict, intraday: Optional[Dict], market_regime: Optional[str] = None) -> Dict:
         """
         Combine daily and intraday analysis
 
@@ -320,6 +358,7 @@ class MultiTimeframeAnalyzer:
         Args:
             daily: Daily analysis results
             intraday: Intraday analysis results (or None)
+            market_regime: Current market regime for adaptive classification (optional)
 
         Returns:
             Combined analysis
@@ -410,8 +449,8 @@ class MultiTimeframeAnalyzer:
         # Signal score with strategic boost for mean reversion (if valid quality)
         base_signal_score = combined['overall_quality']
         
-        # Add signal type classification BEFORE scoring adjustment
-        signal_type = self._classify_signal_type(daily, intraday)
+        # Add signal type classification BEFORE scoring adjustment (with market regime awareness)
+        signal_type = self._classify_signal_type(daily, intraday, market_regime=market_regime)
         combined['signal_type'] = signal_type
         
         # STRATEGIC BOOST: Mean reversion signals get bonus if they pass quality checks
@@ -432,11 +471,16 @@ class MultiTimeframeAnalyzer:
         combined['trend_strength'] = daily['trend']
 
         # Add indicators dict for compatibility (using REAL values from daily analysis)
+        # Get ATR from daily indicators dict (calculated by technical_indicators)
+        daily_indicators = daily.get('indicators', {})
+        atr_value = daily_indicators.get('atr', 0)
+        
         combined['indicators'] = {
             'rsi': daily.get('rsi', 50),
             'adx': daily.get('adx', 0),  # REAL ADX from technical indicators
             'macd': daily.get('macd', 0),  # REAL MACD from technical indicators
             'macd_histogram': daily.get('macd_histogram', 0),
+            'atr': atr_value,  # ATR for dynamic stop loss calculation
             'volume_ratio': 1.5 if daily.get('volume_trend') == 'STRONG' else 1.0
         }
 
@@ -459,12 +503,13 @@ class MultiTimeframeAnalyzer:
 
         return combined
 
-    def _classify_signal_type(self, daily: Dict, intraday: Optional[Dict]) -> str:
+    def _classify_signal_type(self, daily: Dict, intraday: Optional[Dict], market_regime: Optional[str] = None) -> str:
         """
         Classify signal as BREAKOUT, MOMENTUM, or MEAN_REVERSION
         BALANCED approach - not too strict, not too lenient
         
         RESTORED: Back to working configuration that catches real pullbacks
+        ADAPTIVE: Adjusts RSI range based on market regime (SIDEWAYS = more lenient)
         """
         rsi = daily.get('rsi', 50)
         price = daily.get('current_price', 0)
@@ -474,29 +519,54 @@ class MultiTimeframeAnalyzer:
         volume_ratio = daily.get('volume_ratio', 1.0)
         macd_histogram = daily.get('macd_histogram', 0)
 
-        # BREAKOUT: Breaking resistance with volume surge (15-min chart)
+        # BREAKOUT: Breaking resistance with volume surge (DAILY + 15-min chart)
         # Breakouts are powerful - they combine momentum + fresh demand
+        # Check BOTH daily and intraday breakouts (catch more opportunities)
+        
+        # 1. Daily breakout detection (NEW - catches daily breakouts)
+        daily_breakout = self._detect_daily_breakout(daily)
+        if daily_breakout and volume_ratio > 1.3:  # Daily breakouts need 1.3x+ volume
+            return 'BREAKOUT'
+        
+        # 2. Intraday breakout detection (existing - 15-min chart)
         if intraday and intraday.get('recent_breakout'):
-            if volume_ratio > 1.5:  # Good volume (was 1.8 - too strict)
+            if volume_ratio > 1.3:  # Reduced from 1.5 - more catchable
                 return 'BREAKOUT'
 
         # MEAN_REVERSION: Pullback in uptrend (Industry Standard)
-        # RSI 30-45 = true pullback zone (professional range)
-        if 30 <= rsi <= 45:
+        # ADAPTIVE RSI RANGE: SIDEWAYS markets allow RSI 30-50, others use 30-45
+        max_rsi_mean_rev = 50 if market_regime == 'SIDEWAYS' else 45
+        if 30 <= rsi <= max_rsi_mean_rev:
             # Must be in uptrend (above 50-MA - STRICT)
             if ema_50 > 0 and price > ema_50:
-                # Must be pulling back (below 20-MA - STRICT)
-                if ema_20 > 0 and price < ema_20:
-                    return 'MEAN_REVERSION'
-                # Fallback: If no 20-MA, RSI check is enough
-                elif ema_20 <= 0:
-                    return 'MEAN_REVERSION'
+                # SIDEWAYS: Allow price between EMAs (more lenient)
+                # BULL/BEAR: Must be below 20-MA (strict)
+                if market_regime == 'SIDEWAYS':
+                    # In sideways, allow price between 20-MA and 50-MA (still a pullback)
+                    if ema_20 > 0 and price <= ema_20:
+                        return 'MEAN_REVERSION'
+                    elif ema_20 <= 0:
+                        return 'MEAN_REVERSION'
+                else:
+                    # BULL/BEAR: Strict - must be below 20-MA
+                    if ema_20 > 0 and price < ema_20:
+                        return 'MEAN_REVERSION'
+                    elif ema_20 <= 0:
+                        return 'MEAN_REVERSION'
             # Alternative: Above 200-MA if 50-MA not available
             elif ema_200 > 0 and price > ema_200:
-                if ema_20 > 0 and price < ema_20:
-                    return 'MEAN_REVERSION'
-                elif ema_20 <= 0:
-                    return 'MEAN_REVERSION'
+                if market_regime == 'SIDEWAYS':
+                    # SIDEWAYS: More lenient
+                    if ema_20 > 0 and price <= ema_20:
+                        return 'MEAN_REVERSION'
+                    elif ema_20 <= 0:
+                        return 'MEAN_REVERSION'
+                else:
+                    # BULL/BEAR: Strict
+                    if ema_20 > 0 and price < ema_20:
+                        return 'MEAN_REVERSION'
+                    elif ema_20 <= 0:
+                        return 'MEAN_REVERSION'
 
         # MOMENTUM: RSI 60-70, strong trend, above EMAs (Industry Standard)
         if 60 <= rsi <= 70:
@@ -567,7 +637,7 @@ class MultiTimeframeAnalyzer:
             quality['reasons'].append(f'RS {rs_rating:.0f} (outperforming)')
 
         quality['score'] = score
-        quality['is_valid'] = score >= 50  # Industry Standard: 50+ score minimum
+        quality['is_valid'] = score >= 50  # Industry Standard: 50+ score minimum (matches swing requirement)
 
         return quality
 
@@ -596,11 +666,17 @@ class MultiTimeframeAnalyzer:
 
         score = 0
 
-        # 1. RSI in momentum zone (60-68 = strong but not overbought)
+        # 1. RSI in momentum zone (40-72 for swing, 60-68 for strong momentum)
         if 60 <= rsi <= 68:
             score += 25
             quality['reasons'].append(f'RSI in momentum zone ({rsi:.1f})')
-        elif rsi < 60:
+        elif 40 <= rsi < 60:
+            score += 15  # Good momentum but not strongest (ok for swing 1-2% moves)
+            quality['reasons'].append(f'RSI {rsi:.1f} (good momentum)')
+        elif 68 < rsi <= 72:
+            score += 15  # High RSI but can still make 1-2% moves
+            quality['reasons'].append(f'RSI {rsi:.1f} (high but acceptable)')
+        else:
             score += 5  # Weak momentum
             quality['reasons'].append('RSI below momentum threshold')
 
@@ -609,14 +685,17 @@ class MultiTimeframeAnalyzer:
             score += 20
             quality['reasons'].append('Above 50-day MA (strong uptrend)')
 
-        # 3. ADX check - CRITICAL for momentum (Industry Standard)
-        if adx >= MOMENTUM_CONFIG['MIN_ADX']:
+        # 3. ADX check - More lenient for swing (12+ instead of 25+)
+        if adx >= 12:  # Lower threshold for swing (was MOMENTUM_CONFIG['MIN_ADX'] = 25)
             if adx >= 40:
                 score += 30
                 quality['reasons'].append(f'ADX {adx:.1f} (very strong trend)')
-            else:
+            elif adx >= 25:
                 score += 25
                 quality['reasons'].append(f'ADX {adx:.1f} (strong trend)')
+            else:  # ADX 12-25 (good for swing 1-2% moves)
+                score += 18
+                quality['reasons'].append(f'ADX {adx:.1f} (moderate trend - good for swing)')
         else:
             # No ADX means weak trend - give minimal points
             score += 5
@@ -657,7 +736,17 @@ class MultiTimeframeAnalyzer:
             quality['reasons'].append(f'RS {rs_rating:.0f} (outperforming)')
 
         quality['score'] = score
-        quality['is_valid'] = score >= 60  # Industry Standard: 60+ for momentum
+        
+        # More lenient validation for swing (stocks with lower scores can still make 1-2% moves)
+        # Accept if score >= 25 OR if basic criteria met (RSI 40-72, ADX >=12, Volume >=0.8x)
+        basic_criteria_met = (
+            (40 <= rsi <= 72) and 
+            (adx >= 12) and 
+            (volume_ratio >= 0.8) and
+            (ema_50 > 0 and price > ema_50)  # In uptrend
+        )
+        
+        quality['is_valid'] = score >= 25 or basic_criteria_met  # Much more lenient for swing
 
         return quality
 
@@ -734,7 +823,7 @@ class MultiTimeframeAnalyzer:
             quality['reasons'].append(f'RS {rs_rating:.0f} (outperforming market)')
 
         quality['score'] = score
-        quality['is_valid'] = score >= 60  # Breakouts need 60+ (same as momentum - rare but powerful)
+        quality['is_valid'] = score >= 50  # Relaxed for swing catching: 50+ (was 60)
 
         return quality
 
