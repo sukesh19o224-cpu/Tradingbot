@@ -263,8 +263,8 @@ class EODIntradaySystem:
             # SWING: MOMENTUM ONLY - Reject Mean Reversion and Breakout
             if signal_type != 'MOMENTUM':
                 print(f"   ❌ REJECTED - Swing trades are MOMENTUM ONLY (got {signal_type})")
-                    print()
-                    continue
+                print()
+                continue
             
             # Check momentum quality for swing trades
             if signal_type == 'MOMENTUM':
@@ -395,36 +395,36 @@ class EODIntradaySystem:
 
         print(f"\n👁️ Monitoring Swing Positions ({len(swing_positions)} positions):")
 
-            # Get current prices
-            from src.data.enhanced_data_fetcher import EnhancedDataFetcher
-            fetcher = EnhancedDataFetcher(api_delay=0.2)
+        # Get current prices
+        from src.data.enhanced_data_fetcher import EnhancedDataFetcher
+        fetcher = EnhancedDataFetcher(api_delay=0.2)
 
-            current_prices = {}
-            for symbol in swing_positions.keys():
-                price = fetcher.get_current_price(symbol)
-                if price > 0:
-                    current_prices[symbol] = price
+        current_prices = {}
+        for symbol in swing_positions.keys():
+            price = fetcher.get_current_price(symbol)
+            if price > 0:
+                current_prices[symbol] = price
 
-            # Check for exits and trailing stop activations
-            exits, trailing_activations = self.dual_portfolio.monitor_swing_positions(current_prices)
+        # Check for exits and trailing stop activations
+        exits, trailing_activations = self.dual_portfolio.monitor_swing_positions(current_prices)
 
-            # Send trailing stop activation alerts
-            if trailing_activations:
-                for activation in trailing_activations:
-                    print(f"   🔒 {activation['symbol']}: Trailing stop activated (Profit: +{activation['profit_pct']*100:.2f}%)")
-                    if self.discord.enabled:
-                        self.discord.send_trailing_stop_alert(activation, paper_trade=True)
+        # Send trailing stop activation alerts
+        if trailing_activations:
+            for activation in trailing_activations:
+                print(f"   🔒 {activation['symbol']}: Trailing stop activated (Profit: +{activation['profit_pct']*100:.2f}%)")
+                if self.discord.enabled:
+                    self.discord.send_trailing_stop_alert(activation, paper_trade=True)
 
         # Send exit alerts for ALL exits (partial and full)
         # User wants to see all exits: T1 (60%), T2 (40%), Stop Loss (full), etc.
-            if exits:
-                for exit_info in exits:
+        if exits:
+            for exit_info in exits:
                 exit_type = exit_info.get('exit_type', 'FULL')
                 print(f"   🚪 {exit_info['symbol']}: ₹{exit_info['pnl']:+,.0f} ({exit_info['reason']}) [{exit_type}]")
-                
+
                 # Send Discord alert for ALL exits (partial and full)
-                    if self.discord.enabled:
-                        self.discord.send_exit_alert(exit_info, strategy='swing', paper_trade=True)
+                if self.discord.enabled:
+                    self.discord.send_exit_alert(exit_info, strategy='swing', paper_trade=True)
 
     def monitor_positional_positions_only(self):
         """Monitor positional positions only (called every 2 minutes)"""
@@ -437,35 +437,35 @@ class EODIntradaySystem:
         print(f"\n👁️ Monitoring Positional Positions ({len(positional_positions)} positions):")
 
         # Get current prices
-            from src.data.enhanced_data_fetcher import EnhancedDataFetcher
-            fetcher = EnhancedDataFetcher(api_delay=0.2)
+        from src.data.enhanced_data_fetcher import EnhancedDataFetcher
+        fetcher = EnhancedDataFetcher(api_delay=0.2)
 
-            current_prices = {}
-            for symbol in positional_positions.keys():
-                price = fetcher.get_current_price(symbol)
-                if price > 0:
-                    current_prices[symbol] = price
+        current_prices = {}
+        for symbol in positional_positions.keys():
+            price = fetcher.get_current_price(symbol)
+            if price > 0:
+                current_prices[symbol] = price
 
-            # Check for exits and trailing stop activations
-            exits, trailing_activations = self.dual_portfolio.monitor_positional_positions(current_prices)
+        # Check for exits and trailing stop activations
+        exits, trailing_activations = self.dual_portfolio.monitor_positional_positions(current_prices)
 
-            # Send trailing stop activation alerts
-            if trailing_activations:
-                for activation in trailing_activations:
-                    print(f"   🔒 {activation['symbol']}: Trailing stop activated (Profit: +{activation['profit_pct']*100:.2f}%)")
-                    if self.discord.enabled:
-                        self.discord.send_trailing_stop_alert(activation, paper_trade=True)
+        # Send trailing stop activation alerts
+        if trailing_activations:
+            for activation in trailing_activations:
+                print(f"   🔒 {activation['symbol']}: Trailing stop activated (Profit: +{activation['profit_pct']*100:.2f}%)")
+                if self.discord.enabled:
+                    self.discord.send_trailing_stop_alert(activation, paper_trade=True)
 
         # Send exit alerts for ALL exits (partial and full)
         # User wants to see all exits: T1 (30%), T2 (40%), Stop Loss (full), etc.
-            if exits:
-                for exit_info in exits:
+        if exits:
+            for exit_info in exits:
                 exit_type = exit_info.get('exit_type', 'FULL')
                 print(f"   🚪 {exit_info['symbol']}: ₹{exit_info['pnl']:+,.0f} ({exit_info['reason']}) [{exit_type}]")
-                
+
                 # Send Discord alert for ALL exits (partial and full)
-                    if self.discord.enabled:
-                        self.discord.send_exit_alert(exit_info, strategy='positional', paper_trade=True)
+                if self.discord.enabled:
+                    self.discord.send_exit_alert(exit_info, strategy='positional', paper_trade=True)
 
     def run_continuous(self):
         """

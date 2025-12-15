@@ -480,9 +480,9 @@ class SequentialScanner:
                 # This catches stocks that might start moving soon
                 if macd_signal not in ['BULLISH', 'BULLISH_CROSSOVER']:
                     if momentum_1d < -0.5 and momentum_5d < 0:  # Only reject if clearly falling
-                    if verbose and symbol:
+                        if verbose and symbol:
                             print(f"      ⚠️ Swing rejected: Falling momentum (MACD: {macd_signal}, 1d: {momentum_1d:.1f}%, 5d: {momentum_5d:.1f}%)")
-                    return False
+                        return False
                     # If not falling fast, allow it (optimistic for quick 1-2% moves)
                 
             else:
@@ -642,17 +642,17 @@ class SequentialScanner:
         if current_price <= 0 or df is None or len(df) < 20:
             return 0.0
         
-        # 1. Gap up detection (MORE SELECTIVE - only significant gaps)
-        has_gap_up, gap_percent = self._detect_gap_up(df, threshold=0.015)  # Increased from 1% to 1.5%
+        # 1. Gap up detection (BALANCED - catch meaningful gaps)
+        has_gap_up, gap_percent = self._detect_gap_up(df, threshold=0.010)  # 1.0% threshold (BALANCED - catch early momentum)
         if has_gap_up:
             if strategy_type == 'swing':
-                # Swing: +0.8 for significant gap up (reduced from 1.5)
+                # Swing: +0.8 for significant gap up
                 boost += 0.8
             else:  # positional
-                # Positional: +0.6 for significant gap up (reduced from 1.2)
-                boost += 0.6
+                # Positional: +0.5 for gap up (BALANCED - moderate boost)
+                boost += 0.5
         
-        # 2. Volume surge boosters (MORE SELECTIVE - only exceptional volume)
+        # 2. Volume surge boosters (STRICT - strong institutional confirmation required)
         try:
             current_volume = df['Volume'].iloc[-1]
             avg_volume = df['Volume'].tail(20).mean()
@@ -661,34 +661,33 @@ class SequentialScanner:
             # Fallback to indicators if calculation fails
             volume_ratio = indicators.get('volume_ratio', 1.0)
         if strategy_type == 'swing':
-            if volume_ratio >= 2.0:  # Increased from 1.5 to 2.0 (more selective)
-                boost += 0.8  # Strong volume surge (reduced from 1.2)
-            elif volume_ratio >= 1.8:  # Increased from 1.3 to 1.8 (more selective)
-                boost += 0.4  # Good volume surge (reduced from 0.8)
+            if volume_ratio >= 2.0:  # Strong volume surge
+                boost += 0.8
+            elif volume_ratio >= 1.8:  # Good volume surge
+                boost += 0.4
         else:  # positional
-            if volume_ratio >= 2.5:  # Increased from 2.0 to 2.5 (more selective)
-                boost += 1.0  # Very strong volume (reduced from 1.5)
-            elif volume_ratio >= 2.0:  # Increased from 1.5 to 2.0
-                boost += 0.5  # Strong volume (reduced from 1.0)
+            if volume_ratio >= 2.5:  # HIGH - 2.5x volume (very strong institutional buying)
+                boost += 1.0  # Very strong volume boost
+            elif volume_ratio >= 1.7:  # HIGH - 1.7x volume (good institutional confirmation)
+                boost += 0.7  # Strong volume boost
         
-        # 3. 20-day high breakout (MORE SELECTIVE - only near actual high)
-        if self._is_near_20_day_high(df, current_price, threshold=0.005):  # Tightened from 2% to 0.5%
+        # 3. 10-day high breakout (BALANCED - shorter timeframe for 10-day rotation)
+        if self._is_near_20_day_high(df, current_price, threshold=0.010):  # BALANCED - 1% threshold (catch early breakouts)
             if strategy_type == 'swing':
-                boost += 0.5  # Breaking highs = strong momentum (reduced from 1.0)
+                boost += 0.5  # Breaking highs = strong momentum
             else:  # positional
-                boost += 0.6  # Important for positional (reduced from 1.2)
+                boost += 0.7  # BALANCED - important for momentum continuation
         
-        # 4. ADX strength boost (MORE SELECTIVE - only strong trends)
+        # 4. ADX strength boost (STRICT - strong trends only for fast moves)
         adx = indicators.get('adx', 0)
         if strategy_type == 'swing':
-            if adx >= 25:  # Increased from 20 to 25 (more selective)
-                boost += 0.3  # Strong trend (reduced from 0.5)
-            # Removed ADX 18-20 boost (too common)
+            if adx >= 25:  # Strong trend
+                boost += 0.3
         else:  # positional
-            if adx >= 30:  # Increased from 25 to 30 (more selective)
-                boost += 0.5  # Very strong trend (reduced from 0.8)
-            elif adx >= 25:  # Increased from 20 to 25
-                boost += 0.3  # Strong trend (reduced from 0.5)
+            if adx >= 25:  # STRICT - strong trend (fast 2-3% moves)
+                boost += 0.6  # Strong trend boost (increased)
+            elif adx >= 22:  # STRICT - building momentum (catch early)
+                boost += 0.4  # Moderate trend boost
         
         # Cap boost at 2.0 to prevent score inflation (reduced from 3.0)
         return min(boost, 2.0)
@@ -742,7 +741,7 @@ class SequentialScanner:
             
             # Use SWING_TARGETS from config (high-frequency: 1%, 2%, 3%)
             from config.settings import SWING_TARGETS
-                stop_loss = entry_price * (1 - stop_loss_pct)
+            stop_loss = entry_price * (1 - stop_loss_pct)
             targets = SWING_TARGETS  # Now: [0.01, 0.02, 0.03] for quick profits
             
             target1 = entry_price * (1 + targets[0])

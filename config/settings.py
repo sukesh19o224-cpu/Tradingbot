@@ -60,23 +60,23 @@ TRAILING_STOP_ATR_MULTIPLIER = 0.8  # Swing: Trail by 0.8x ATR (ultra-tight for 
 
 # Stop Loss & Targets - ONE DAY TRADER (INTRADAY ONLY - same day exits, quick profit-taking)
 SWING_STOP_LOSS = 0.01  # 1.0% stop loss for swing (ULTRA-TIGHT - quick exits, frequent trades, preserves capital)
-POSITIONAL_STOP_LOSS = 0.04  # 4% stop loss for positional
+POSITIONAL_STOP_LOSS = 0.02  # 2% stop loss for positional (BALANCED - tighter stops for 2-3% targets, better R:R)
 
 # ATR-Based Dynamic Stop Loss (Volatility-Adjusted)
 # Adapts stop loss to each stock's volatility - prevents premature exits
 USE_ATR_STOP_LOSS = True  # Enable ATR-based stop loss (recommended)
 ATR_PERIOD = 14  # 14-day ATR calculation period
 ATR_MULTIPLIER_SWING = 1.0  # 1.0x ATR for swing (ultra-tight stops for quick profits, fast exits)
-ATR_MULTIPLIER_POSITIONAL = 2.5  # 2.5x ATR for positional (wider stop) - UNTOUCHED
+ATR_MULTIPLIER_POSITIONAL = 1.8  # 1.8x ATR for positional (BALANCED - tighter for 10-day rotation, institutional standard)
 
 # ATR Stop Loss Clamps (Strategy-Specific)
 # Swing: Tight range for quick trades
 ATR_MIN_STOP_LOSS_SWING = 0.008  # Minimum 0.8% stop loss (ultra-tight for quick trades)
 ATR_MAX_STOP_LOSS_SWING = 0.015  # Maximum 1.5% stop loss (tight ceiling for quick exits)
 
-# Positional: Wider range to allow proper ATR-based stops (2.5x ATR typically gives 2-6% stops)
-ATR_MIN_STOP_LOSS_POSITIONAL = 0.02  # Minimum 2% stop loss (allows proper ATR calculation)
-ATR_MAX_STOP_LOSS_POSITIONAL = 0.06  # Maximum 6% stop loss (prevents excessive stops)
+# Positional: Tighter range for BALANCED 10-day rotation (1.8x ATR gives 1.5-2.5% stops)
+ATR_MIN_STOP_LOSS_POSITIONAL = 0.015  # Minimum 1.5% stop loss (BALANCED - tighter for quick exits)
+ATR_MAX_STOP_LOSS_POSITIONAL = 0.025  # Maximum 2.5% stop loss (BALANCED - prevents excessive stops, quick exits)
 
 # Backward compatibility (will be overridden in code based on strategy)
 ATR_MIN_STOP_LOSS = 0.02  # Default: Use positional values (wider range)
@@ -87,7 +87,7 @@ ATR_MAX_STOP_LOSS = 0.06  # Default: Use positional values (wider range)
 # Risk/Reward: 1.0% risk → 1.0%/1.5%/2.0% reward = 1:1 to 2:1 ratio (excellent for intraday)
 # Optimized for: 60%+ win rate with daily reset, no overnight risk, quick exits at 1.0-2.0% profit (same day only)
 SWING_TARGETS = [0.01, 0.015, 0.02]  # 1.0%, 1.5%, 2.0% targets (INTRADAY - same day exits only, force exit at 3:25 PM)
-POSITIONAL_TARGETS = [0.05, 0.10, 0.15]  # 5%, 10%, 15% targets (INTERMEDIATE - achievable in 1-2 weeks)
+POSITIONAL_TARGETS = [0.025, 0.04, 0.06]  # 2.5%, 4%, 6% targets (BALANCED - 10-day rotation, institutional capital efficiency)
 
 # ═══════════════════════════════════════════════════════════════
 # 🎯 STRATEGY-SPECIFIC CONFIGURATIONS
@@ -106,17 +106,17 @@ MEAN_REVERSION_CONFIG = {
     'VOLUME_SPIKE_MIN': 1.2,  # Minimum 1.2x volume (was 1.3x - more lenient)
 }
 
-# MOMENTUM Strategy - Ride strong trends
+# MOMENTUM Strategy - HIGH QUALITY for fast 2.5% movers (4-7 days)
 MOMENTUM_CONFIG = {
-    'STOP_LOSS': 0.04,  # 4% stop loss (tighter = better R/R)
-    'TARGETS': [0.05, 0.10, 0.15],  # 5%, 10%, 15% targets
-    'MIN_ADX': 25,  # Strong trend
-    'MIN_RSI': 50,  # Above 50
-    'MAX_RSI': 68,  # Below 68 (avoid overbought - was 70)
-    'MAX_DISTANCE_FROM_MA20': 12.0,  # Not more than 12% above 20-day MA (avoid extended)
-    'MIN_VOLUME_RATIO': 1.3,  # Minimum 1.3x volume (balanced - not too strict)
+    'STOP_LOSS': 0.02,  # 2% stop loss (HIGH - tighter for quick exits)
+    'TARGETS': [0.025, 0.04, 0.06],  # 2.5%, 4%, 6% targets (hit 2.5% in 4-7 days)
+    'MIN_ADX': 20,  # Emerging momentum (HIGH - catch early but with confirmation)
+    'MIN_RSI': 50,  # Above 50 (HIGH - momentum zone)
+    'MAX_RSI': 63,  # Below 63 (HIGH - room to move, not overbought)
+    'MAX_DISTANCE_FROM_MA20': 9.0,  # Not more than 9% above 20-day MA (HIGH - reasonable)
+    'MIN_VOLUME_RATIO': 1.7,  # Minimum 1.7x volume (HIGH - good institutional confirmation)
     'REQUIRE_ABOVE_MA50': True,  # Must be above 50-day MA
-    'TRAILING_STOP_ACTIVATION': 0.02,  # Activate trailing at +2% (was +3%)
+    'TRAILING_STOP_ACTIVATION': 0.015,  # Activate trailing at +1.5% (lock profits earlier)
 }
 
 # BREAKOUT Strategy - Breaking resistance
@@ -203,7 +203,7 @@ ML_FEATURES = [
 # ═══════════════════════════════════════════════════════════════
 
 # Scoring System (0-10)
-MIN_SIGNAL_SCORE = 7.0  # Positional: Good quality (balanced - allows MR + Momentum) - UNTOUCHED
+MIN_SIGNAL_SCORE = 7.7  # Positional: HIGH quality (67-72% win rate, good balance)
 MIN_SWING_SIGNAL_SCORE = 5.5  # Swing: Lower threshold for 1-2% quick moves (catch more opportunities, exit fast)
 HIGH_QUALITY_SCORE = 8.5  # High quality signal threshold (for auto-replacement)
 # Note: Lower score threshold for swing because we're targeting smaller moves (1-2%) that happen more frequently
@@ -398,9 +398,9 @@ SWING_HOLD_DAYS_MIN = 1  # Same day exit only (intraday trader)
 SWING_HOLD_DAYS_MAX = 1  # Same day exit only (intraday trader) - NOTE: Code forces exit at 3:25 PM regardless
 SWING_ENABLED = True  # ENABLED - OPTIMIZED FOR INTRADAY: score ≥5.5, ADX 12-25, RSI 42-68, Volume ≥0.8x (stocks ABOUT TO move same day)
 
-# Positional Trading (INTERMEDIATE) - High quality setups, faster exits
-POSITIONAL_HOLD_DAYS_MIN = 5  # Minimum 5 days (was 10)
-POSITIONAL_HOLD_DAYS_MAX = 15  # Maximum 15 days - FAST PROFIT TAKING
+# Positional Trading (BALANCED 10-DAY ROTATION) - Institutional capital efficiency
+POSITIONAL_HOLD_DAYS_MIN = 5  # Minimum 5 days (target 2.5% profit by day 5)
+POSITIONAL_HOLD_DAYS_MAX = 10  # Maximum 10 days (BALANCED - exit by day 10, force capital rotation)
 POSITIONAL_ENABLED = True
 
 # ═══════════════════════════════════════════════════════════════

@@ -154,10 +154,10 @@ class DiscordAlerts:
             strategy = signal.get('strategy', 'positional')  # Get from signal if available
             if strategy not in ['swing', 'positional']:
                 # Fallback to trade_type detection
-            if 'SWING' in trade_type:
-                strategy = 'swing'
-            elif 'POSITIONAL' in trade_type:
-                strategy = 'positional'
+                if 'SWING' in trade_type:
+                    strategy = 'swing'
+                elif 'POSITIONAL' in trade_type:
+                    strategy = 'positional'
                 else:
                     strategy = 'positional'  # default
             
