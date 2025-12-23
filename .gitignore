@@ -24,8 +24,7 @@ logs/
 *.swp
 
 # Data
-data/*.csv
-data/*.json
+# (No exclusions - tracking all data files)
 
 # OS
 .DS_Store

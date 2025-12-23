@@ -1,0 +1,16 @@
+{
+  "capital": 50000,
+  "positions": {},
+  "performance": {
+    "total_trades": 0,
+    "winning_trades": 0,
+    "losing_trades": 0,
+    "total_pnl": 0,
+    "best_trade": 0,
+    "worst_trade": 0
+  },
+  "start_date": "2025-12-10T06:39:04.723589",
+  "last_updated": "2025-12-10T06:39:04.723613",
+  "initial_capital": 50000,
+  "mode": "PAPER_TRADING"
+}
