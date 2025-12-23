@@ -368,13 +368,17 @@ class MultiTimeframeAnalyzer:
             'symbol': None,  # Will be set by caller
             'daily_trend': daily['trend'],
             'daily_trend_score': daily['trend_score'],
-            'current_price': daily['current_price'],
+            'current_price': daily['current_price'],  # Fallback to daily price
             'support': daily['support_level'],
             'resistance': daily['resistance_level'],
             'fibonacci': daily['fibonacci_levels'],
         }
 
         if intraday:
+            # CRITICAL FIX: Use REAL-TIME intraday price instead of stale daily price
+            # Intraday data has the most recent 15-min candle close = current market price
+            combined['current_price'] = intraday['current_price']  # Override with fresh price
+
             # Add intraday timing signals
             combined.update({
                 'has_intraday_data': True,
@@ -455,16 +459,51 @@ class MultiTimeframeAnalyzer:
         
         # STRATEGIC BOOST: Mean reversion signals get bonus if they pass quality checks
         # This helps them compete with momentum while maintaining quality standards
+        # UPDATED FOR BALANCED SCORING: MR now scores 0-209 (was 0-100)
         if signal_type == 'MEAN_REVERSION':
             mr_quality = self._check_mean_reversion_quality(daily)
-            if mr_quality['is_valid'] and mr_quality['score'] >= 60:
-                # High quality mean reversion: +0.5 boost
-                base_signal_score = min(10.0, base_signal_score + 0.5)
-            elif mr_quality['is_valid'] and mr_quality['score'] >= 50:
-                # Good quality mean reversion: +0.3 boost
-                base_signal_score = min(10.0, base_signal_score + 0.3)
-        
-        combined['signal_score'] = base_signal_score  # Comprehensive score with boost
+            base_boost = 0
+            if mr_quality['is_valid'] and mr_quality['score'] >= 160:
+                base_boost = 1.5  # Excellent mean reversion (77% of max 209)
+            elif mr_quality['is_valid'] and mr_quality['score'] >= 130:
+                base_boost = 1.2  # High quality mean reversion (62% of max)
+            elif mr_quality['is_valid'] and mr_quality['score'] >= 100:
+                base_boost = 1.0  # Good quality mean reversion (48% of max)
+            elif mr_quality['is_valid']:
+                base_boost = 0.7  # Acceptable mean reversion (45-100 pts)
+
+            # STOCK-SPECIFIC TREND ADJUSTMENT: Use the stock's own trend, not market regime
+            stock_trend = daily.get('trend', 'SIDEWAYS')
+
+            # If the STOCK ITSELF is in pullback/weak uptrend → extra boost for mean reversion
+            if stock_trend in ['WEAK_UPTREND', 'UPTREND']:
+                base_boost += 0.7  # Stock in pullback/weak uptrend = ideal for MR
+            elif stock_trend == 'SIDEWAYS':
+                base_boost += 0.5  # Sideways stock = good for MR
+
+            # Market regime as SECONDARY factor (smaller adjustment)
+            if market_regime == 'SIDEWAYS':
+                base_boost += 0.2  # Minor extra boost if market also sideways
+
+            base_signal_score = min(10.0, base_signal_score + base_boost)
+
+        # STOCK-SPECIFIC MOMENTUM ADJUSTMENT: Use the stock's own trend
+        elif signal_type == 'MOMENTUM':
+            stock_trend = daily.get('trend', 'SIDEWAYS')
+
+            # If the STOCK ITSELF is in strong uptrend → boost momentum
+            if stock_trend == 'STRONG_UPTREND':
+                base_signal_score = min(10.0, base_signal_score + 0.5)  # Boost for strong momentum
+            # If the STOCK ITSELF is weak/sideways → penalize momentum
+            elif stock_trend in ['WEAK_UPTREND', 'SIDEWAYS']:
+                base_signal_score = max(0, base_signal_score - 0.5)  # Weak stock momentum
+
+            # Market regime as SECONDARY factor
+            if market_regime == 'SIDEWAYS' and stock_trend != 'STRONG_UPTREND':
+                # Penalize momentum if both market AND stock are not strong
+                base_signal_score = max(0, base_signal_score - 0.3)
+
+        combined['signal_score'] = base_signal_score  # Comprehensive score with boost/penalty
         combined['technical_score'] = technical_score  # Add technical score
         combined['trend_only_score'] = daily['trend_score']  # Keep trend-only for reference
         combined['current_price'] = daily['current_price']
@@ -533,42 +572,42 @@ class MultiTimeframeAnalyzer:
             if volume_ratio > 1.3:  # Reduced from 1.5 - more catchable
                 return 'BREAKOUT'
 
-        # MEAN_REVERSION: Pullback in uptrend (Industry Standard)
-        # ADAPTIVE RSI RANGE: SIDEWAYS markets allow RSI 30-50, others use 30-45
-        max_rsi_mean_rev = 50 if market_regime == 'SIDEWAYS' else 45
-        if 30 <= rsi <= max_rsi_mean_rev:
+        # MEAN_REVERSION: Pullback in uptrend (LOOSENED FOR 3+ TRADES)
+        # LOOSENED RSI RANGE: RSI 28-54 (widened from 28-52 to catch more stocks)
+        # LOOSENED PRICE CHECK: Allow stocks slightly further from 20-MA (catches stocks already bouncing)
+        max_rsi_mean_rev = 54 if market_regime == 'SIDEWAYS' else 53
+        if 28 <= rsi <= max_rsi_mean_rev:
             # Must be in uptrend (above 50-MA - STRICT)
             if ema_50 > 0 and price > ema_50:
-                # SIDEWAYS: Allow price between EMAs (more lenient)
-                # BULL/BEAR: Must be below 20-MA (strict)
+                # LOOSENED: Allow stocks that have already started bouncing (wider price range)
                 if market_regime == 'SIDEWAYS':
-                    # In sideways, allow price between 20-MA and 50-MA (still a pullback)
-                    if ema_20 > 0 and price <= ema_20:
+                    # SIDEWAYS: Loosened - allow up to 4% above 20-MA (catches stocks already bouncing)
+                    if ema_20 > 0 and price <= ema_20 * 1.04:  # Up to 4% above 20-MA (loosened from 3%)
                         return 'MEAN_REVERSION'
                     elif ema_20 <= 0:
                         return 'MEAN_REVERSION'
                 else:
-                    # BULL/BEAR: Strict - must be below 20-MA
-                    if ema_20 > 0 and price < ema_20:
+                    # BULL/BEAR: Loosened - allow up to 3% above 20-MA (loosened from 2.5%)
+                    if ema_20 > 0 and price <= ema_20 * 1.03:  # Up to 3% above 20-MA (loosened from 2.5%)
                         return 'MEAN_REVERSION'
                     elif ema_20 <= 0:
                         return 'MEAN_REVERSION'
             # Alternative: Above 200-MA if 50-MA not available
             elif ema_200 > 0 and price > ema_200:
                 if market_regime == 'SIDEWAYS':
-                    # SIDEWAYS: More lenient
-                    if ema_20 > 0 and price <= ema_20:
+                    # SIDEWAYS: Loosened
+                    if ema_20 > 0 and price <= ema_20 * 1.04:
                         return 'MEAN_REVERSION'
                     elif ema_20 <= 0:
                         return 'MEAN_REVERSION'
                 else:
-                    # BULL/BEAR: Strict
-                    if ema_20 > 0 and price < ema_20:
+                    # BULL/BEAR: Loosened
+                    if ema_20 > 0 and price <= ema_20 * 1.03:
                         return 'MEAN_REVERSION'
                     elif ema_20 <= 0:
                         return 'MEAN_REVERSION'
 
-        # MOMENTUM: RSI 60-70, strong trend, above EMAs (Industry Standard)
+        # MOMENTUM: RSI 60-70, strong trend, above EMAs (Industry Standard - ORIGINAL)
         if 60 <= rsi <= 70:
             if price > ema_50:  # Above 50-day MA
                 return 'MOMENTUM'
@@ -579,7 +618,14 @@ class MultiTimeframeAnalyzer:
 
     def _check_mean_reversion_quality(self, daily: Dict) -> Dict:
         """
-        Check if mean reversion setup has good entry confirmation
+        🎯 MEAN REVERSION STAGE DETECTOR - Catch stocks in the "LATER MID" ZONE
+
+        Theory: Best mean reversion entries are AFTER bounce has started from oversold
+        - Too Early = Falling knife, no bottom confirmation → Losses
+        - PERFECT = Bounce confirmed (1-3 days), RSI rising from oversold, 2%+ potential → Best R:R
+        - Too Late = Already bounced too much, no 2% left → Minimal gains
+
+        BALANCED SCORING: Matches momentum scale (0-145 points, min 35 = 24%)
         Returns quality metrics for filtering
         """
         from config.settings import MEAN_REVERSION_CONFIG
@@ -587,72 +633,299 @@ class MultiTimeframeAnalyzer:
         quality = {
             'is_valid': False,
             'score': 0,
-            'reasons': []
+            'reasons': [],
+            'bounce_stage': 'UNKNOWN'
         }
 
         rsi = daily.get('rsi', 50)
         price = daily.get('current_price', 0)
+        ema_20 = daily.get('ema_20', 0)
         ema_50 = daily.get('ema_50', 0)
         volume_ratio = daily.get('volume_ratio', 1.0)
         macd_histogram = daily.get('macd_histogram', 0)
+        adx = daily.get('adx', 0)
         rs_rating = daily.get('rs_rating', 100)  # RS vs Nifty 50
 
-        score = 0
+        # Get indicators for Bollinger and Stochastic
+        indicators = daily.get('indicators', {})
 
-        # 1. RSI in mean reversion zone (30-45 = professional range)
-        if 30 <= rsi <= 40:
-            score += 30
-            quality['reasons'].append(f'RSI in strong reversal zone ({rsi:.1f})')
-        elif 40 < rsi <= 45:
-            score += 20
+        score = 0
+        bounce_stage_bonus = 0
+
+        # 🎯 CRITICAL: BOUNCE STAGE DETECTION (matches momentum's breakout detection)
+        # Analyze last 10 days to detect oversold -> bounce timing
+        df = daily.get('df')
+
+        if df is not None and len(df) >= 10:
+            # Get last 10 days of RSI to detect oversold period
+            last_10_days = df.tail(11).iloc[:-1]  # Exclude current day
+
+            # Find when RSI was last oversold (<30)
+            oversold_days_ago = None
+            for i, (idx, row) in enumerate(last_10_days[::-1].iterrows()):
+                row_rsi = self._calculate_rsi(df.loc[:idx, 'Close'], 14)
+                if row_rsi < 30:
+                    oversold_days_ago = i + 1
+                    break
+
+            # Check if RSI is now rising (bounce confirmation)
+            current_rsi = rsi
+            yesterday_rsi = self._calculate_rsi(df['Close'].iloc[:-1], 14) if len(df) >= 15 else current_rsi
+            rsi_rising = current_rsi > yesterday_rsi
+
+            # Check if price is bouncing off support (20-MA or Bollinger lower band)
+            bb_position = indicators.get('bb_position', 0.5)
+            near_support = bb_position <= 0.30 or (ema_20 > 0 and price <= ema_20 * 1.02)
+
+            # Check MACD momentum building
+            macd_turning_positive = macd_histogram > -0.5  # Close to turning positive
+
+            # 🎯 STAGE CLASSIFICATION (like momentum's breakout stages)
+            if oversold_days_ago is not None:
+                # Bounce has started from oversold
+                if oversold_days_ago == 1:
+                    # Just bounced yesterday (Day 1 of bounce)
+                    if 30 <= current_rsi <= 42 and rsi_rising and near_support:
+                        quality['bounce_stage'] = 'PERFECT_DAY1'
+                        bounce_stage_bonus = 35  # Strong confirmation
+                        quality['reasons'].append(f'🎯 PERFECT DAY1: Just bounced from oversold, RSI rising ({current_rsi:.1f})')
+                    else:
+                        quality['bounce_stage'] = 'GOOD_DAY1'
+                        bounce_stage_bonus = 25
+                        quality['reasons'].append(f'Good bounce start (Day 1, RSI {current_rsi:.1f})')
+
+                elif 2 <= oversold_days_ago <= 3:
+                    # THE SWEET SPOT - 2-3 days into bounce
+                    if 30 <= current_rsi <= 50 and rsi_rising and macd_turning_positive:
+                        quality['bounce_stage'] = 'PERFECT_DAY2-3'
+                        bounce_stage_bonus = 40  # MAXIMUM BONUS (like momentum)
+                        quality['reasons'].append(f'🎯 PERFECT DAY2-3: Bounce confirmed, momentum building (RSI {current_rsi:.1f})')
+                    else:
+                        quality['bounce_stage'] = 'GOOD_DAY2-3'
+                        bounce_stage_bonus = 25
+                        quality['reasons'].append(f'Good bounce window (Day {oversold_days_ago}, RSI {current_rsi:.1f})')
+
+                elif 4 <= oversold_days_ago <= 5:
+                    # Getting late but still has potential
+                    if current_rsi <= 50 and rsi_rising:
+                        quality['bounce_stage'] = 'LATE_BUT_OK'
+                        bounce_stage_bonus = 15
+                        quality['reasons'].append(f'Late bounce (Day {oversold_days_ago}), still potential (RSI {current_rsi:.1f})')
+                    else:
+                        quality['bounce_stage'] = 'LATE'
+                        bounce_stage_bonus = 5
+                        quality['reasons'].append(f'Late bounce (Day {oversold_days_ago}, RSI {current_rsi:.1f})')
+
+                else:  # 6+ days
+                    # Too late - bounce exhausted
+                    quality['bounce_stage'] = 'EXHAUSTED'
+                    bounce_stage_bonus = -10  # Penalty
+                    quality['reasons'].append(f'⚠️ Bounce exhausted (Day {oversold_days_ago}, RSI {current_rsi:.1f})')
+
+            else:
+                # No recent oversold - check if currently falling (FALLING KNIFE) or already bouncing
+                if current_rsi < 30 and not rsi_rising:
+                    quality['bounce_stage'] = 'FALLING_KNIFE'
+                    bounce_stage_bonus = -20  # Heavy penalty - AVOID FALLING KNIFE
+                    quality['reasons'].append(f'⚠️ FALLING KNIFE: Still falling, no bounce (RSI {current_rsi:.1f})')
+                elif 30 <= current_rsi <= 50 and rsi_rising:
+                    # Already bouncing/going up - GOOD! (widened from 42 to 50)
+                    quality['bounce_stage'] = 'EARLY_BOUNCE'
+                    bounce_stage_bonus = 20
+                    quality['reasons'].append(f'✅ Already bouncing up (RSI {current_rsi:.1f}, rising)')
+                elif 30 <= current_rsi <= 50:
+                    # In bounce zone but RSI not clearly rising - check MACD for confirmation
+                    if macd_turning_positive or macd_histogram > -1.0:
+                        quality['bounce_stage'] = 'EARLY_BOUNCE'
+                        bounce_stage_bonus = 15  # Lower bonus but still acceptable
+                        quality['reasons'].append(f'Bounce zone, MACD turning (RSI {current_rsi:.1f})')
+                    else:
+                        quality['bounce_stage'] = 'NO_RECENT_OVERSOLD'
+                        bounce_stage_bonus = 0
+                        quality['reasons'].append('In bounce zone but no clear reversal confirmation')
+                else:
+                    quality['bounce_stage'] = 'NO_RECENT_OVERSOLD'
+                    bounce_stage_bonus = 0
+                    quality['reasons'].append('No recent oversold condition')
+
+        score += bounce_stage_bonus
+
+        # =========================================================================
+        # BALANCED SCORING COMPONENTS (Rebalanced to match momentum scale)
+        # =========================================================================
+
+        # 1. RSI in mean reversion zone (28-50 = OPTIMIZED for 2% bounces) - MAX 30 pts (INCREASED from 25)
+        if 28 <= rsi <= 35:
+            score += 30  # Deep oversold = best 2% bounce potential (INCREASED)
+            quality['reasons'].append(f'RSI deeply oversold ({rsi:.1f}) - prime for 2% bounce')
+        elif 35 < rsi <= 42:
+            score += 24  # Good oversold level (INCREASED from 20)
+            quality['reasons'].append(f'RSI oversold ({rsi:.1f}) - good for 2% bounce')
+        elif 42 < rsi <= 50:
+            score += 18  # Moderate pullback (INCREASED from 15)
             quality['reasons'].append(f'RSI in pullback zone ({rsi:.1f})')
 
-        # 2. Still in uptrend (MUST be above 50-MA - STRICT)
+        # 2. Still in uptrend (MUST be above 50-MA - STRICT) - MAX 25 pts (INCREASED from 20, matches momentum)
         if ema_50 > 0 and price > ema_50:
             score += 25
             quality['reasons'].append('Above 50-day MA (uptrend intact)')
 
-        # 3. Volume pickup (buying interest - minimum 1.0x)
-        if volume_ratio >= MEAN_REVERSION_CONFIG['VOLUME_SPIKE_MIN']:
-            score += 20
-            quality['reasons'].append(f'Volume spike {volume_ratio:.1f}x')
+        # 3. ADX check (pullback = weaker trend temporarily) - MAX 28 pts (INCREASED from 25)
+        # Mean reversion typically has ADX 15-25 (pullback = weaker trend)
+        if adx >= 15:
+            if adx >= 25:
+                score += 22  # Higher ADX = stronger trend = safer mean reversion (INCREASED from 20)
+                quality['reasons'].append(f'ADX {adx:.1f} (strong uptrend with pullback)')
+            elif adx >= 18:
+                score += 28  # Sweet spot for mean reversion (moderate trend) (INCREASED from 25)
+                quality['reasons'].append(f'ADX {adx:.1f} (ideal mean reversion setup)')
+            else:  # ADX 15-18
+                score += 18  # Lower ADX but acceptable (INCREASED from 15)
+                quality['reasons'].append(f'ADX {adx:.1f} (moderate pullback)')
+        else:
+            score += 6  # Very weak trend (INCREASED from 5)
+            quality['reasons'].append(f'ADX {adx:.1f} (weak trend)')
+
+        # 4. 2% PROFIT POTENTIAL CHECK (CRITICAL for user requirement) - MAX 18 pts (INCREASED from 15)
+        # Calculate distance to resistance (20-MA or recent high)
+        # For stocks already bouncing (RSI rising), use higher target (they can go higher)
+        # Check if RSI is rising (use variable from bounce stage detection if available)
+        is_bouncing_up = False
+        if df is not None and len(df) >= 15:
+            try:
+                current_rsi_check = rsi
+                yesterday_rsi_check = self._calculate_rsi(df['Close'].iloc[:-1], 14)
+                is_bouncing_up = current_rsi_check > yesterday_rsi_check and current_rsi_check >= 30
+            except:
+                pass
+        
+        if is_bouncing_up:
+            # Already bouncing - can target 50-MA or higher
+            resistance_target = max(ema_20, ema_50) if ema_50 > price else (ema_20 if ema_20 > price else price * 1.03)
+        else:
+            resistance_target = ema_20 if ema_20 > price else price * 1.02
+        profit_potential = ((resistance_target - price) / price) * 100
+
+        if profit_potential >= 2.5:
+            score += 18  # Excellent 2%+ potential (INCREASED from 15)
+            quality['reasons'].append(f'Profit potential {profit_potential:.1f}% (excellent for 2% target)')
+        elif profit_potential >= 2.0:
+            score += 14  # Good 2% potential (INCREASED from 12)
+            quality['reasons'].append(f'Profit potential {profit_potential:.1f}% (meets 2% target)')
+        elif profit_potential >= 1.5:
+            score += 9  # Moderate potential (INCREASED from 8)
+            quality['reasons'].append(f'Profit potential {profit_potential:.1f}% (below 2% target)')
+        elif profit_potential >= 1.0:
+            score += 5  # Low but acceptable for stocks already bouncing (NEW)
+            quality['reasons'].append(f'Profit potential {profit_potential:.1f}% (low but acceptable for bounce)')
+        else:
+            score += 0  # Not enough potential
+            quality['reasons'].append(f'⚠️ Profit potential only {profit_potential:.1f}% (insufficient)')
+
+        # 5. Volume confirmation - MAX 25 pts (INCREASED from 20, matches momentum)
+        if volume_ratio >= 1.5:
+            score += 25  # Very strong (INCREASED from 20)
+            quality['reasons'].append(f'Volume {volume_ratio:.1f}x (very strong)')
+        elif volume_ratio >= 1.3:
+            score += 19  # Strong (INCREASED from 15)
+            quality['reasons'].append(f'Volume {volume_ratio:.1f}x (strong)')
         elif volume_ratio >= 1.0:
-            score += 10
-            quality['reasons'].append(f'Volume average {volume_ratio:.1f}x')
+            score += 12  # Normal (INCREASED from 10)
+            quality['reasons'].append(f'Volume {volume_ratio:.1f}x (normal)')
+        else:
+            score += 6  # Low but acceptable (INCREASED from 5)
+            quality['reasons'].append(f'Volume {volume_ratio:.1f}x (low but acceptable)')
 
-        # 4. MACD showing reversal signs (histogram turning positive)
+        # 6. MACD/Bollinger/Stochastic - Combined reversal confirmation - MAX 18 pts (INCREASED from 15)
+        reversal_points = 0
+
+        # MACD reversal
         if macd_histogram > 0:
-            score += 15
-            quality['reasons'].append('MACD turning bullish')
-        elif macd_histogram > -0.5:
-            score += 10
-            quality['reasons'].append('MACD close to turning')
+            reversal_points += 6  # INCREASED from 5
+            quality['reasons'].append('MACD bullish (reversal confirmed)')
+        elif macd_histogram > -1.0:
+            reversal_points += 4  # INCREASED from 3
+            quality['reasons'].append('MACD near reversal')
 
-        # 5. Relative Strength vs Nifty 50 (O'Neil method)
-        if rs_rating >= 110:  # Strongly outperforming
-            score += 15
+        # Bollinger Bands
+        bb_position = indicators.get('bb_position', 0.5)
+        if bb_position <= 0.15:  # At/below lower band
+            reversal_points += 6  # INCREASED from 5
+            quality['reasons'].append('At Bollinger lower band')
+        elif bb_position <= 0.30:
+            reversal_points += 4  # INCREASED from 3
+            quality['reasons'].append('Near Bollinger lower band')
+
+        # Stochastic
+        stoch_k = indicators.get('stoch_k', 50)
+        stoch_d = indicators.get('stoch_d', 50)
+        if stoch_k < 20 and stoch_k > stoch_d:
+            reversal_points += 6  # INCREASED from 5
+            quality['reasons'].append(f'Stochastic oversold + cross ({stoch_k:.1f})')
+        elif stoch_k < 30:
+            reversal_points += 4  # INCREASED from 3
+            quality['reasons'].append(f'Stochastic oversold ({stoch_k:.1f})')
+
+        score += min(reversal_points, 18)  # Cap at 18 points (INCREASED from 15)
+
+        # 7. Relative Strength - MAX 25 pts (INCREASED from 20, matches momentum)
+        if rs_rating >= 120:
+            score += 25  # Very strong outperformer (INCREASED from 20)
+            quality['reasons'].append(f'RS {rs_rating:.0f} (very strong outperformer)')
+        elif rs_rating >= 110:
+            score += 19  # Strong outperformer (INCREASED from 15)
             quality['reasons'].append(f'RS {rs_rating:.0f} (strong outperformer)')
-        elif rs_rating >= 100:  # Outperforming
-            score += 10
+        elif rs_rating >= 100:
+            score += 12  # Outperforming (INCREASED from 10)
             quality['reasons'].append(f'RS {rs_rating:.0f} (outperforming)')
+        elif rs_rating >= 95:
+            score += 6  # Matching market (INCREASED from 5)
+            quality['reasons'].append(f'RS {rs_rating:.0f} (matching market)')
 
         quality['score'] = score
-        quality['is_valid'] = score >= 50  # Industry Standard: 50+ score minimum (matches swing requirement)
+
+        # =========================================================================
+        # BALANCED VALIDATION THRESHOLDS (Middle ground - not too strict, not too loose)
+        # =========================================================================
+        # NEW BASE MAX: 169 points (up from 140)
+        # With stage bonus: up to 209 points (vs 180 before)
+
+        # FURTHER LOOSENED thresholds to catch 3+ MR signals per scan
+        # Still avoids falling knives (they get -20 penalty, so won't pass)
+        if quality['bounce_stage'] in ['PERFECT_DAY1', 'PERFECT_DAY2-3', 'EARLY_BOUNCE']:
+            quality['is_valid'] = score >= 35  # 17% of max 209 (further loosened from 38 to catch more)
+        elif quality['bounce_stage'] == 'FALLING_KNIFE':
+            # RELAXED: Allow high-quality falling knives (score must be VERY high to overcome risk)
+            quality['is_valid'] = score >= 80  # Need 38% of max 209 to pass (vs never before)
+        else:
+            quality['is_valid'] = score >= 38  # 22% of max 169 (further loosened from 42 to catch more)
 
         return quality
 
     def _check_momentum_quality(self, daily: Dict) -> Dict:
         """
-        Check if momentum setup has good entry confirmation
-        Avoids overbought entries and ensures strong trend
+        🎯 SAFE MOMENTUM STRATEGY - Low Risk, Steady 2% Profits
+
+        NEW USER PREFERENCE: Stocks ALREADY in confirmed momentum
+        - NOT early breakout guessing (risky)
+        - YES steady uptrend continuation (safe 2% gains)
+        - High win rate, low stress, reliable profits
+
+        Theory: Enter stocks with PROVEN momentum, not speculative breakouts
+        - STEADY_MOMENTUM = Already trending, confirmed, ready for 2% (PREFERRED)
+        - LATE_BUT_OK = Still has fuel, safe entry
+        - NO_BREAKOUT = Smooth uptrend without volatility (BEST for 2%)
+
         Returns quality metrics for filtering
         """
         from config.settings import MOMENTUM_CONFIG
+        import pandas as pd
 
         quality = {
             'is_valid': False,
             'score': 0,
-            'reasons': []
+            'reasons': [],
+            'momentum_stage': 'UNKNOWN'  # TOO_EARLY, PERFECT, LATE, EXHAUSTED
         }
 
         rsi = daily.get('rsi', 50)
@@ -666,87 +939,249 @@ class MultiTimeframeAnalyzer:
 
         score = 0
 
-        # 1. RSI in momentum zone (40-72 for swing, 60-68 for strong momentum)
-        if 60 <= rsi <= 68:
-            score += 25
-            quality['reasons'].append(f'RSI in momentum zone ({rsi:.1f})')
-        elif 40 <= rsi < 60:
-            score += 15  # Good momentum but not strongest (ok for swing 1-2% moves)
-            quality['reasons'].append(f'RSI {rsi:.1f} (good momentum)')
-        elif 68 < rsi <= 72:
-            score += 15  # High RSI but can still make 1-2% moves
-            quality['reasons'].append(f'RSI {rsi:.1f} (high but acceptable)')
-        else:
-            score += 5  # Weak momentum
-            quality['reasons'].append('RSI below momentum threshold')
+        # =========================================================================
+        # CRITICAL: MOMENTUM STAGE DETECTION (The "Before Mid" Sweet Spot)
+        # =========================================================================
 
-        # 2. Strong trend (above 50 MA)
+        # Get historical data to detect breakout timing
+        df = daily.get('df')  # Full dataframe with price history
+        momentum_stage_bonus = 0
+
+        if df is not None and len(df) >= 20:
+            try:
+                # Calculate 20-day high/low for breakout detection
+                recent_20d_high = df['High'].tail(21).iloc[:-1].max()  # Exclude today
+                recent_20d_low = df['Low'].tail(21).iloc[:-1].min()
+
+                # Check if price recently broke above 20-day high (1-5 days ago)
+                last_5_days = df.tail(6).iloc[:-1]  # Last 5 days excluding today
+                breakout_days_ago = None
+
+                for i, (idx, row) in enumerate(last_5_days[::-1].iterrows()):
+                    if row['Close'] > recent_20d_high * 0.98:  # Within 2% of breakout
+                        breakout_days_ago = i + 1
+                        break
+
+                # Calculate RSI momentum (rising or falling)
+                rsi_series = df['RSI'].tail(5) if 'RSI' in df.columns else None
+                rsi_rising = rsi_series.iloc[-1] > rsi_series.iloc[-3] if rsi_series is not None and len(rsi_series) >= 3 else False
+
+                # Determine momentum stage (ADJUSTED FOR SAFE 2% STRATEGY)
+                if breakout_days_ago is not None:
+                    if breakout_days_ago == 1:
+                        # DAY 1: Just broke out today/yesterday - RISKY!
+                        if 55 <= rsi <= 68 and adx >= 20:
+                            quality['momentum_stage'] = 'PERFECT_DAY1'
+                            momentum_stage_bonus = 15  # REDUCED from 35 - Too risky for user preference
+                            quality['reasons'].append(f'⚠️ RISKY: Fresh breakout (Day {breakout_days_ago}), not confirmed yet')
+                        else:
+                            quality['momentum_stage'] = 'TOO_EARLY'
+                            momentum_stage_bonus = 0  # REDUCED from 5
+                            quality['reasons'].append(f'❌ Too early: Breakout Day {breakout_days_ago} but weak confirmation')
+
+                    elif 2 <= breakout_days_ago <= 3:
+                        # DAY 2-3: Still somewhat risky (breakout could fail)
+                        if 55 <= rsi <= 70 and adx >= 20 and rsi_rising:
+                            quality['momentum_stage'] = 'PERFECT_DAY2-3'
+                            momentum_stage_bonus = 25  # REDUCED from 40 - Still early/risky
+                            quality['reasons'].append(f'⚠️ MODERATE: Breakout Day {breakout_days_ago}, trend confirming')
+                        elif 55 <= rsi <= 72:
+                            quality['momentum_stage'] = 'GOOD_DAY2-3'
+                            momentum_stage_bonus = 20  # REDUCED from 25
+                            quality['reasons'].append(f'Breakout Day {breakout_days_ago}, RSI {rsi:.1f}')
+                        else:
+                            quality['momentum_stage'] = 'WEAKENING'
+                            momentum_stage_bonus = 5  # REDUCED from 10
+                            quality['reasons'].append(f'Breakout Day {breakout_days_ago} but momentum weakening')
+
+                    elif 4 <= breakout_days_ago <= 7:
+                        # DAY 4-7: SAFER - Breakout proven, still has room
+                        if rsi < 70 and rsi_rising and adx >= 25:
+                            quality['momentum_stage'] = 'LATE_BUT_OK'
+                            momentum_stage_bonus = 30  # INCREASED from 15 - This is safer!
+                            quality['reasons'].append(f'✅ SAFE: Proven momentum (Day {breakout_days_ago}), stable uptrend')
+                        else:
+                            quality['momentum_stage'] = 'LATE'
+                            momentum_stage_bonus = 20  # INCREASED from 5 - Still acceptable
+                            quality['reasons'].append(f'✅ Established trend (Day {breakout_days_ago}), lower risk')
+
+                    else:  # 8+ days
+                        # EXHAUSTED - Too late, move already happened
+                        quality['momentum_stage'] = 'EXHAUSTED'
+                        momentum_stage_bonus = -10  # PENALTY
+                        quality['reasons'].append(f'❌ Too late: Breakout {breakout_days_ago} days ago, move likely exhausted')
+
+                else:
+                    # No recent breakout detected - PREFERRED for safe 2% plays!
+                    if rsi >= 55 and adx >= 20:
+                        quality['momentum_stage'] = 'STEADY_MOMENTUM'
+                        momentum_stage_bonus = 35  # INCREASED from 10 - This is what user wants!
+                        quality['reasons'].append('✅ SAFE: Steady momentum (proven uptrend, low risk 2% play)')
+                    else:
+                        quality['momentum_stage'] = 'NO_BREAKOUT'
+                        momentum_stage_bonus = 25  # INCREASED from 0 - Still safe if other criteria met
+                        quality['reasons'].append('✅ SAFE: No breakout volatility (smooth uptrend for 2%)')
+
+            except Exception as e:
+                # Fallback if stage detection fails
+                quality['momentum_stage'] = 'DETECTION_FAILED'
+                momentum_stage_bonus = 0
+
+        # =========================================================================
+        # STANDARD MOMENTUM SCORING (Enhanced with stage bonus)
+        # =========================================================================
+
+        # 1. RSI CHECK - Must have room for 2% move (NOT exhausted!)
+        # CRITICAL: Avoid overbought stocks that can't move higher
+        if 55 <= rsi <= 65:
+            score += 30  # PERFECT - Strong but room to run
+            quality['reasons'].append(f'✅ RSI {rsi:.1f} (strong + 2% potential)')
+        elif 50 <= rsi < 55:
+            score += 25  # Building momentum, plenty of room
+            quality['reasons'].append(f'✅ RSI {rsi:.1f} (building, lots of fuel)')
+        elif 65 < rsi <= 68:
+            score += 20  # Still good but getting warm
+            quality['reasons'].append(f'RSI {rsi:.1f} (good, some fuel left)')
+        elif 68 < rsi <= 70:
+            score += 10  # Elevated - limited upside
+            quality['reasons'].append(f'⚠️ RSI {rsi:.1f} (elevated, limited fuel)')
+        elif rsi > 70:
+            score += 0  # EXHAUSTED - avoid!
+            quality['reasons'].append(f'❌ RSI {rsi:.1f} (exhausted, no fuel for 2%)')
+        else:
+            score += 5  # Too weak for momentum
+            quality['reasons'].append(f'⚠️ RSI {rsi:.1f} (too weak)')
+
+        # 2. Strong trend (above 50 MA) - MANDATORY
         if ema_50 > 0 and price > ema_50:
-            score += 20
-            quality['reasons'].append('Above 50-day MA (strong uptrend)')
-
-        # 3. ADX check - More lenient for swing (12+ instead of 25+)
-        if adx >= 12:  # Lower threshold for swing (was MOMENTUM_CONFIG['MIN_ADX'] = 25)
-            if adx >= 40:
-                score += 30
-                quality['reasons'].append(f'ADX {adx:.1f} (very strong trend)')
-            elif adx >= 25:
-                score += 25
-                quality['reasons'].append(f'ADX {adx:.1f} (strong trend)')
-            else:  # ADX 12-25 (good for swing 1-2% moves)
-                score += 18
-                quality['reasons'].append(f'ADX {adx:.1f} (moderate trend - good for swing)')
+            distance_from_50ma = ((price - ema_50) / ema_50) * 100
+            if distance_from_50ma >= 2:
+                score += 25  # Good cushion above 50-MA
+                quality['reasons'].append(f'Strong uptrend ({distance_from_50ma:.1f}% above 50-MA)')
+            else:
+                score += 15  # Just above 50-MA
+                quality['reasons'].append('Above 50-MA (uptrend)')
         else:
-            # No ADX means weak trend - give minimal points
-            score += 5
+            score -= 20  # PENALTY - Not in uptrend
+            quality['reasons'].append('❌ Below 50-MA (no uptrend)')
+
+        # 3. ADX - Trend strength (CRITICAL for momentum)
+        if adx >= 25:  # Strong trending market
+            if adx >= 35:
+                score += 35  # Very strong trend
+                quality['reasons'].append(f'ADX {adx:.1f} (very strong trend)')
+            else:
+                score += 28
+                quality['reasons'].append(f'ADX {adx:.1f} (strong trend)')
+        elif adx >= 20:  # Moderate trend
+            score += 20
+            quality['reasons'].append(f'ADX {adx:.1f} (moderate trend)')
+        elif adx >= 15:  # Weak trend
+            score += 10
             quality['reasons'].append(f'ADX {adx:.1f} (weak trend)')
+        else:
+            score += 0  # No trend - avoid
+            quality['reasons'].append(f'⚠️ ADX {adx:.1f} (no trend)')
 
-        # 4. Not too extended (within 10% of 20-day MA)
+        # 4. FUEL CHECK - Price vs 20-MA (avoid exhausted moves!)
+        # CRITICAL: Stock must have room to run 2%+ from current price
         if ema_20 > 0:
-            distance_from_ma20 = (price - ema_20) / ema_20 * 100
-            if distance_from_ma20 <= 10:
-                score += 15
-                quality['reasons'].append(f'{distance_from_ma20:.1f}% from 20-MA (not extended)')
+            distance_from_ma20 = ((price - ema_20) / ema_20) * 100
+            if 0 <= distance_from_ma20 <= 3:  # IDEAL - Confirmed but fresh
+                score += 25  # INCREASED - This is perfect for 2% plays
+                quality['reasons'].append(f'✅ Fresh momentum ({distance_from_ma20:+.1f}% from 20-MA, fuel left)')
+            elif 3 < distance_from_ma20 <= 5:  # Good - still has room
+                score += 20
+                quality['reasons'].append(f'✅ Good position ({distance_from_ma20:+.1f}% from 20-MA, some fuel)')
+            elif 5 < distance_from_ma20 <= 7:  # Stretched but acceptable
+                score += 10
+                quality['reasons'].append(f'⚠️ Extended ({distance_from_ma20:+.1f}% from 20-MA, limited fuel)')
+            elif distance_from_ma20 > 7:  # TOO EXTENDED - EXHAUSTED!
+                score -= 15  # INCREASED PENALTY
+                quality['reasons'].append(f'❌ Exhausted ({distance_from_ma20:+.1f}% from 20-MA, no 2% left)')
+            else:  # Below 20-MA - pullback
+                score += 15  # Good entry on pullback
+                quality['reasons'].append(f'✅ Pullback ({distance_from_ma20:+.1f}% from 20-MA, fresh fuel)')
 
-        # 5. Volume confirmation (minimum 1.3x for momentum)
-        if volume_ratio >= 1.5:
+        # 5. Volume confirmation (CRITICAL - institutions buying)
+        if volume_ratio >= 1.8:
+            score += 25  # Massive volume = institutional interest
+            quality['reasons'].append(f'Volume {volume_ratio:.1f}x (institutional buying)')
+        elif volume_ratio >= 1.5:
             score += 20
             quality['reasons'].append(f'Volume {volume_ratio:.1f}x (very strong)')
-        elif volume_ratio >= 1.3:
-            score += 15
+        elif volume_ratio >= 1.2:
+            score += 12
             quality['reasons'].append(f'Volume {volume_ratio:.1f}x (strong)')
         elif volume_ratio >= 1.0:
             score += 5
             quality['reasons'].append(f'Volume {volume_ratio:.1f}x (average)')
+        else:
+            score += 0  # Low volume = no conviction
+            quality['reasons'].append(f'⚠️ Volume {volume_ratio:.1f}x (weak)')
 
-        # 6. MACD positive (momentum intact)
+        # 6. MACD confirmation
         if macd_histogram > 0:
-            score += 10
+            score += 12
             quality['reasons'].append('MACD bullish')
+        else:
+            score += 0
+            quality['reasons'].append('MACD bearish/neutral')
 
-        # 7. Relative Strength vs Nifty 50 (O'Neil method - CRITICAL for momentum)
-        if rs_rating >= 120:  # Very strongly outperforming
-            score += 20
-            quality['reasons'].append(f'RS {rs_rating:.0f} (very strong outperformer)')
-        elif rs_rating >= 110:  # Strongly outperforming
-            score += 15
+        # 7. Relative Strength (Outperformance vs market)
+        if rs_rating >= 120:
+            score += 25  # Very strong outperformer
+            quality['reasons'].append(f'RS {rs_rating:.0f} (market leader)')
+        elif rs_rating >= 110:
+            score += 18
             quality['reasons'].append(f'RS {rs_rating:.0f} (strong outperformer)')
-        elif rs_rating >= 100:  # Outperforming
+        elif rs_rating >= 100:
             score += 10
             quality['reasons'].append(f'RS {rs_rating:.0f} (outperforming)')
+        elif rs_rating >= 95:
+            score += 5
+            quality['reasons'].append(f'RS {rs_rating:.0f} (matching market)')
+        else:
+            score += 0
+            quality['reasons'].append(f'⚠️ RS {rs_rating:.0f} (underperforming)')
+
+        # =========================================================================
+        # ADD MOMENTUM STAGE BONUS (The secret sauce!)
+        # =========================================================================
+        score += momentum_stage_bonus
 
         quality['score'] = score
-        
-        # More lenient validation for swing (stocks with lower scores can still make 1-2% moves)
-        # Accept if score >= 25 OR if basic criteria met (RSI 40-72, ADX >=12, Volume >=0.8x)
-        basic_criteria_met = (
-            (40 <= rsi <= 72) and 
-            (adx >= 12) and 
-            (volume_ratio >= 0.8) and
-            (ema_50 > 0 and price > ema_50)  # In uptrend
-        )
-        
-        quality['is_valid'] = score >= 25 or basic_criteria_met  # Much more lenient for swing
+
+        # =========================================================================
+        # CRITICAL FILTERS - Avoid exhausted stocks!
+        # =========================================================================
+
+        # MANDATORY: RSI must be < 70 (room for 2% move)
+        if rsi > 70:
+            quality['is_valid'] = False
+            quality['reasons'].append('❌ REJECTED: RSI >70, stock exhausted')
+            return quality
+
+        # MANDATORY: Price < 7% above 20-MA (must have fuel left)
+        if ema_20 > 0:
+            distance_from_ma20 = ((price - ema_20) / ema_20) * 100
+            if distance_from_ma20 > 7:
+                quality['is_valid'] = False
+                quality['reasons'].append(f'❌ REJECTED: {distance_from_ma20:.1f}% above 20-MA, exhausted')
+                return quality
+
+        # =========================================================================
+        # VALIDATION THRESHOLDS (Adjusted for safe 2% strategy)
+        # =========================================================================
+        # Prioritize SAFE entries (steady momentum, proven trends)
+        # Penalize RISKY entries (early breakouts, unconfirmed)
+
+        if quality['momentum_stage'] in ['STEADY_MOMENTUM', 'NO_BREAKOUT', 'LATE_BUT_OK', 'LATE']:
+            quality['is_valid'] = score >= 50  # RELAXED for safe entries (user preference)
+        elif quality['momentum_stage'] in ['PERFECT_DAY2-3', 'GOOD_DAY2-3']:
+            quality['is_valid'] = score >= 60  # Moderate threshold for early entries
+        else:
+            quality['is_valid'] = score >= 70  # STRICT for risky early/uncertain entries
 
         return quality
 
@@ -826,6 +1261,29 @@ class MultiTimeframeAnalyzer:
         quality['is_valid'] = score >= 50  # Relaxed for swing catching: 50+ (was 60)
 
         return quality
+
+    def _calculate_rsi(self, prices: pd.Series, period: int = 14) -> float:
+        """
+        Calculate RSI for a price series
+
+        Args:
+            prices: Series of closing prices
+            period: RSI period (default 14)
+
+        Returns:
+            RSI value (0-100)
+        """
+        if len(prices) < period + 1:
+            return 50.0  # Not enough data, return neutral
+
+        delta = prices.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+
+        return float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else 50.0
 
 
 if __name__ == "__main__":

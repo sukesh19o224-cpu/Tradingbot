@@ -85,6 +85,31 @@ class EnhancedDataFetcher:
             if daily_df is not None and not daily_df.empty and len(daily_df) >= 30:
                 # Normalize column names (handle market open/closed variations)
                 daily_df = self._normalize_columns(daily_df)
+                
+                # ✅ DATA FRESHNESS CHECK: Verify data is recent
+                latest_date = daily_df.index[-1]
+                if hasattr(latest_date, 'date'):
+                    latest_date_only = latest_date.date()
+                else:
+                    latest_date_only = latest_date
+                
+                # Check data freshness (warn if > 2 days old)
+                import pytz
+                IST = pytz.timezone('Asia/Kolkata')
+                today = datetime.now(IST).date()
+                
+                if isinstance(latest_date_only, datetime):
+                    latest_date_only = latest_date_only.date()
+                
+                days_old = (today - latest_date_only).days
+                
+                # Warn if data is > 2 days old (might be stale)
+                if days_old > 2:
+                    if verbose:
+                        print(f"   ⚠️ {symbol}: Data is {days_old} days old (latest: {latest_date_only}) - might be stale!")
+                elif verbose and days_old == 0:
+                    print(f"   ✅ {symbol}: Using TODAY's data (fresh!)")
+                
                 result['daily'] = daily_df
                 self.stats['daily_fetched'] += 1
             else:
@@ -142,6 +167,7 @@ class EnhancedDataFetcher:
                         print(f"   🔄 {symbol}: Retrying daily data fetch (attempt {attempt + 1}/{max_retries})")
                     time.sleep(1.0)  # Wait 1s before retry
 
+                # Let yfinance handle its own session (newer versions require curl_cffi)
                 ticker = yf.Ticker(symbol)
 
                 # Fetch daily data (3mo = ~90 days, reliable with yfinance)
@@ -181,6 +207,7 @@ class EnhancedDataFetcher:
                         print(f"   🔄 {symbol}: Retrying intraday data fetch (attempt {attempt + 1}/{max_retries})")
                     time.sleep(1.0)  # Wait 1s before retry
 
+                # Let yfinance handle its own session (newer versions require curl_cffi)
                 ticker = yf.Ticker(symbol)
 
                 # Fetch 1 day of 15-min data (most reliable with yfinance)
@@ -261,8 +288,9 @@ class EnhancedDataFetcher:
             Current price or 0 if failed
         """
         try:
+            # Let yfinance handle its own session (newer versions require curl_cffi)
             ticker = yf.Ticker(symbol)
-            
+
             # Method 1: Try fast_info.lastPrice (REAL-TIME - most accurate during market hours)
             try:
                 fast_info = ticker.fast_info

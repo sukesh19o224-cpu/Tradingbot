@@ -236,8 +236,22 @@ class PaperTrader:
                     print(f"🚫 {symbol} blacklisted - Lost {worst_loss:.2f}% in last 24 hours (swing protection)")
                     return False
 
-            # CRITICAL FIX #1: Enforce MAX_POSITIONS limit
-            # BUT: Allow replacement if signal is high quality
+            # MOMENTUM ONLY: 6 positions, all momentum (no mean reversion)
+            momentum_count = sum(1 for p in self.positions.values() if p.get('signal_type') == 'MOMENTUM')
+            signal_type = signal.get('signal_type', 'MOMENTUM')
+
+            # Reject mean reversion signals
+            if signal_type == 'MEAN_REVERSION':
+                print(f"📄 Mean Reversion DISABLED, skipping {symbol}")
+                return False
+
+            # Momentum: max 6 positions
+            if signal_type == 'MOMENTUM':
+                if momentum_count >= MAX_POSITIONS:
+                    print(f"📄 Momentum positions full ({momentum_count}/{MAX_POSITIONS}), portfolio full")
+                    return False
+
+            # Check total position limit
             if len(self.positions) >= MAX_POSITIONS:
                 # Try to exit weakest position if new signal is high quality
                 if self._try_smart_replacement(signal):
@@ -255,10 +269,11 @@ class PaperTrader:
             # positions capital could go slightly negative by a few rupees.
             strategy_for_sizing = signal.get('strategy', 'positional')
             if strategy_for_sizing == 'swing' and self.capital > 0:
-                # Buy‑side charges are ~0.02% of trade value.
-                # Limiting notional to capital / 1.0002 guarantees we always have
+                # Buy-side charges are ~0.0195% of trade value (from _calculate_trading_charges)
+                # Limiting notional to capital / 1.000195 guarantees we always have
                 # enough to cover charges as well.
-                max_notional_with_charges = self.capital / 1.0002
+                # Using 1.0003 (0.03%) for extra safety margin
+                max_notional_with_charges = self.capital / 1.0003
                 if position_size > max_notional_with_charges:
                     position_size = max_notional_with_charges
 
@@ -275,8 +290,24 @@ class PaperTrader:
                     print(f"📄 Insufficient capital for {symbol}")
                     return False
 
-            entry_price = signal.get('entry_price', 0)
-            
+            # CRITICAL FIX: Get REAL-TIME price for execution (don't use cached scan price)
+            # Scan price could be hours old (morning open), need current market price
+            from src.data.enhanced_data_fetcher import EnhancedDataFetcher
+            data_fetcher = EnhancedDataFetcher()
+            current_price = data_fetcher.get_current_price(symbol)
+
+            # Fallback to signal price if real-time fetch fails
+            if current_price <= 0:
+                current_price = signal.get('entry_price', 0)
+                print(f"⚠️ Could not fetch real-time price for {symbol}, using scan price ₹{current_price:.2f}")
+            else:
+                scan_price = signal.get('entry_price', 0)
+                price_diff_pct = abs(current_price - scan_price) / scan_price * 100 if scan_price > 0 else 0
+                if price_diff_pct > 2:
+                    print(f"💡 Price updated: ₹{scan_price:.2f} (scan) → ₹{current_price:.2f} (current, {price_diff_pct:+.1f}%)")
+
+            entry_price = current_price
+
             # Safety check: entry_price must be valid
             if entry_price <= 0:
                 print(f"⚠️ Invalid entry_price ({entry_price}) for {symbol}, cannot execute")
@@ -339,16 +370,38 @@ class PaperTrader:
             # Determine default max holding days based on strategy
             strategy = signal.get('strategy', 'unknown')
             if strategy == 'swing':
-                default_max_days = 1  # Swing trades: ONE DAY TRADER (intraday only - same day exits, force exit at 3:25 PM)
+                default_max_days = 3  # Swing trades: SHORT-TERM SWING (1-3 days with overnight holds - MAJOR FIX)
             elif strategy == 'positional':
-                default_max_days = 15  # Positional trades: 15 trading days (~3 weeks) - FAST PROFIT
+                default_max_days = 10  # Positional trades: 10 trading days (BALANCED - capital rotation)
             else:
-                default_max_days = 15  # Unknown strategy: conservative default
+                default_max_days = 10  # Unknown strategy: conservative default
 
             # Get ATR from signal indicators (for trailing stop calculation)
             indicators = signal.get('indicators', {})
             atr = indicators.get('atr', 0)
-            
+
+            # CRITICAL FIX: Recalculate targets and stop loss based on NEW entry price
+            # Original targets were based on scan price, need to update for real-time price
+            scan_entry = signal.get('entry_price', entry_price)
+            if scan_entry > 0:
+                # Calculate percentage gains/losses from original signal
+                target1_pct = (signal['target1'] - scan_entry) / scan_entry
+                target2_pct = (signal['target2'] - scan_entry) / scan_entry
+                target3_pct = (signal['target3'] - scan_entry) / scan_entry
+                stop_pct = (signal['stop_loss'] - scan_entry) / scan_entry
+
+                # Apply same percentages to new entry price
+                new_target1 = entry_price * (1 + target1_pct)
+                new_target2 = entry_price * (1 + target2_pct)
+                new_target3 = entry_price * (1 + target3_pct)
+                new_stop = entry_price * (1 + stop_pct)
+            else:
+                # Fallback to original values
+                new_target1 = signal['target1']
+                new_target2 = signal['target2']
+                new_target3 = signal['target3']
+                new_stop = signal['stop_loss']
+
             # Add position
             position_data = {
                 'symbol': symbol,
@@ -357,11 +410,11 @@ class PaperTrader:
                 'entry_price': entry_price,
                 'entry_date': datetime.now().isoformat(),
                 'trade_type': signal['trade_type'],
-                'target1': signal['target1'],
-                'target2': signal['target2'],
-                'target3': signal['target3'],
-                'stop_loss': signal['stop_loss'],
-                'initial_stop_loss': signal['stop_loss'],  # Store initial stop for trailing calculations
+                'target1': new_target1,
+                'target2': new_target2,
+                'target3': new_target3,
+                'stop_loss': new_stop,
+                'initial_stop_loss': new_stop,  # Store initial stop for trailing calculations
                 'atr': atr,  # Store ATR for trailing stop calculations
                 'score': signal['score'],
                 'cost': cost,
@@ -442,8 +495,14 @@ class PaperTrader:
             
             # Strategy-specific trailing stop thresholds
             strategy = position.get('strategy', 'positional')
-            if strategy == 'swing':
-                # Swing: ULTRA-TIGHT trailing to lock in profits quickly
+            max_holding_days = position.get('max_holding_days', 1)
+
+            if strategy == 'swing' and max_holding_days == 0:
+                # 🎯 1% SCALPING: Breakeven at 0.5%, NO trailing (exit at 1% target)
+                breakeven_threshold = 0.005  # Move to breakeven at +0.5% (protect capital quickly)
+                trailing_threshold = 999  # DISABLED for scalping (exit at target only)
+            elif strategy == 'swing':
+                # Swing (multi-day): ULTRA-TIGHT trailing to lock in profits quickly
                 breakeven_threshold = 0.005  # Move to breakeven at +0.5% (protect capital quickly)
                 trailing_threshold = 0.007  # Activate trailing at +0.7% (tighter than before)
             else:
@@ -490,21 +549,33 @@ class PaperTrader:
                         swing_atr_multiplier = 0.5  # Very tight for quick profit protection
                         trailing_distance = atr * swing_atr_multiplier
                     else:
-                        # Positional: Standard trailing
-                        trailing_distance = atr * TRAILING_STOP_ATR_MULTIPLIER
+                        # Positional: Adaptive ATR multiplier based on targets hit
+                        # After T2 (90% exited), tighten ATR trailing to protect last 10%
+                        if position.get('t2_hit', False):
+                            # T2 hit: Only 10% remains - TIGHT ATR trailing (1.0x ATR)
+                            positional_atr_multiplier = 1.0  # Tighter for remaining 10%
+                        else:
+                            # Normal: Standard ATR trailing (1.8x ATR from config)
+                            positional_atr_multiplier = TRAILING_STOP_ATR_MULTIPLIER
+                        trailing_distance = atr * positional_atr_multiplier
                     atr_trailing_stop = current_price - trailing_distance
                     # Ensure trailing stop is at least at breakeven
                     trailing_stop = max(entry_price, atr_trailing_stop)
                 else:
                     # Fallback: Strategy-specific fixed trailing if ATR unavailable
                     if strategy == 'swing':
-                        # Swing: ULTRA-TIGHT trailing (0.5%) to lock in profits
-                        swing_trailing_distance = 0.005  # 0.5% - very tight
-                        trailing_stop = max(entry_price, current_price * (1 - swing_trailing_distance))
+                        # Swing: ULTRA-TIGHT trailing (0.8%) to lock in profits (from TRAILING_STOP_DISTANCE config)
+                        from config.settings import TRAILING_STOP_DISTANCE
+                        trailing_stop = max(entry_price, current_price * (1 - TRAILING_STOP_DISTANCE))
                     else:
-                        # Positional: Standard trailing (wider than swing for proper trend following)
-                        # Use 1.5% trailing distance for positional (wider than swing's 0.8%)
-                        positional_trailing_distance = 0.015  # 1.5% - appropriate for positional trades
+                        # Positional: Adaptive trailing based on targets hit
+                        # After T2 (90% exited), tighten trailing to protect last 10%
+                        if position.get('t2_hit', False):
+                            # T2 hit: Only 10% remains - TIGHT trailing (1% distance)
+                            positional_trailing_distance = 0.010  # 1% - protect remaining 10%
+                        else:
+                            # Normal: Standard trailing (1.5% distance)
+                            positional_trailing_distance = 0.015  # 1.5% - appropriate for positional trades
                         trailing_stop = max(entry_price, current_price * (1 - positional_trailing_distance))
                 
                 # Only raise stop loss, never lower it
@@ -548,9 +619,9 @@ class PaperTrader:
 
             # Priority 2: Target 2 (good profit)
             elif current_price >= position['target2'] and not position.get('t2_hit', False):
-                # INTRADAY: More aggressive exit for swing (quick profit-taking)
+                # Different exit strategies: Swing (aggressive) vs Positional (progressive 50/40/10)
                 strategy = position.get('strategy', 'positional')
-                partial_exit_pct = 0.30 if strategy == 'swing' else 0.40  # Swing/Intraday: 30% at T2 (T1 already took 70%), Positional: 40%
+                partial_exit_pct = 1.00 if strategy == 'swing' else 0.90  # Swing: Exit remaining 40% (100% of remaining after T1's 60%), Positional: Exit 90% total (40% more after T1's 50%)
                 exit_info = self._exit_position(
                     symbol, current_price, 'TARGET_2', partial=partial_exit_pct
                 )
@@ -558,17 +629,18 @@ class PaperTrader:
                     exits.append(exit_info)
                     # Adjust profit lock based on strategy
                     if strategy == 'swing':
-                        # Swing: T2 is 1.5% - lock at +1.2% (most of profit secured, ultra-tight)
-                        profit_lock_stop_t2 = entry_price * 1.012  # +1.2% profit locked (ultra-tight)
+                        # Swing: T2 is 1.5% - Full exit, no stop loss update needed
+                        # Position already deleted by full exit, skip stop loss update
+                        pass
                     else:
-                        # Positional: T2 is 7-10% - lock at +6%
-                        profit_lock_stop_t2 = entry_price * 1.06  # +6% profit locked
-                    
-                    if symbol in self.positions and exit_info['exit_type'] == 'PARTIAL':
-                        self.positions[symbol]['stop_loss'] = profit_lock_stop_t2
-                        self.positions[symbol]['t2_hit'] = True  # Mark T2 as hit
-                        self._save_portfolio()  # Save updated stop
-                        print(f"   🔒 Stop moved to +{(profit_lock_stop_t2/entry_price - 1)*100:.1f}% (₹{profit_lock_stop_t2:.2f}) after T2 - PROFIT LOCKED!")
+                        # Positional: T2 is 4% - lock at +3.5% (90% exited, only 10% remains for T3 runners)
+                        profit_lock_stop_t2 = entry_price * 1.035  # +3.5% profit locked (aggressive - protect last 10%)
+
+                        if symbol in self.positions and exit_info['exit_type'] == 'PARTIAL':
+                            self.positions[symbol]['stop_loss'] = profit_lock_stop_t2
+                            self.positions[symbol]['t2_hit'] = True  # Mark T2 as hit
+                            self._save_portfolio()  # Save updated stop
+                            print(f"   🔒 Stop moved to +{(profit_lock_stop_t2/entry_price - 1)*100:.1f}% (₹{profit_lock_stop_t2:.2f}) after T2 - PROFIT LOCKED!")
                 # Don't continue, check other exits too
 
             # Priority 3: Target 1 (minimum profit)
@@ -587,22 +659,32 @@ class PaperTrader:
                         exits.append(exit_info)
                     continue  # Position closed
                 else:
-                    # T1 hit for first time - Partial exit
-                    # INTRADAY: Ultra-aggressive exit for swing (quick profit-taking)
+                    # T1 hit for first time
                     strategy = position.get('strategy', 'positional')
-                    partial_exit_pct = 0.70 if strategy == 'swing' else 0.30  # Swing/Intraday: 70% at T1 (lock profit quickly), Positional: 30%
-                    exit_info = self._exit_position(
-                        symbol, current_price, 'TARGET_1', partial=partial_exit_pct
-                    )
+                    max_holding_days = position.get('max_holding_days', 1)
+
+                    # 🎯 1% SCALPING: FULL EXIT at T1 (1% target reached)
+                    if strategy == 'swing' and max_holding_days == 0:
+                        exit_info = self._exit_position(
+                            symbol, current_price, '🎯 TARGET_1_SCALP (Full 1% Exit)', full_exit=True
+                        )
+                    else:
+                        # Multi-day swing or positional: Partial exit
+                        # INTRADAY: Ultra-aggressive exit for swing (quick profit-taking)
+                        # POSITIONAL: Aggressive 50% exit at T1 (industry best practice for 2.5%/4%/6% targets)
+                        partial_exit_pct = 0.60 if strategy == 'swing' else 0.50  # Swing/Intraday: 60% at T1 (lock profit quickly), Positional: 50% (balanced approach)
+                        exit_info = self._exit_position(
+                            symbol, current_price, 'TARGET_1', partial=partial_exit_pct
+                        )
                     if exit_info:
                         exits.append(exit_info)
                         # Adjust profit lock based on strategy
                         if strategy == 'swing':
-                            # Swing: T1 is 1.0% - move to breakeven immediately (risk-free trade)
-                            profit_lock_stop = entry_price * 1.002  # +0.2% profit locked (ultra-tight, risk-free)
+                            # Swing: T1 is 1.0% - move to breakeven + small profit (risk-free trade)
+                            profit_lock_stop = entry_price * 1.005  # +0.5% profit locked (breakeven protection)
                         else:
-                            # Positional: T1 is 4-5% - lock at +3%
-                            profit_lock_stop = entry_price * 1.03  # +3% profit locked
+                            # Positional: T1 is 2.5% - lock at +2% (50% exited, 50% remains)
+                            profit_lock_stop = entry_price * 1.020  # +2% profit locked (protect remaining 50%)
                         
                         if symbol in self.positions and exit_info['exit_type'] == 'PARTIAL':
                             self.positions[symbol]['stop_loss'] = profit_lock_stop
@@ -613,62 +695,40 @@ class PaperTrader:
 
             # STOP LOSS already checked at the beginning (Priority 0) - removed duplicate check
 
-            # Priority 5: INTRADAY TIME-BASED EXITS (For swing/intraday only - before market close)
+            # Priority 5: 🎯 INTRADAY TIME-BASED EXITS - FOR 1% SCALPING ONLY (max_holding_days=0)
+            # NEW: Re-enabled for same-day swing scalping (1% profit target)
+            # Applies ONLY to swing trades with max_holding_days=0 (intraday scalpers)
+            # Other swing trades (max_holding_days >0) can hold overnight
             strategy = position.get('strategy', 'positional')
-            if strategy == 'swing':
-                # INTRADAY SYSTEM: Force close all positions before 3:30 PM
-                from config.settings import (
-                    INTRADAY_PROFIT_EXIT_TIME, INTRADAY_BREAKEVEN_EXIT_TIME, 
-                    INTRADAY_FORCE_EXIT_TIME
-                )
-                import pytz
-                # Note: datetime is already imported at top of file
-                
-                IST = pytz.timezone('Asia/Kolkata')
-                current_time_ist = datetime.now(IST)
-                current_hour = current_time_ist.hour
-                current_minute = current_time_ist.minute
-                current_time_str = f"{current_hour:02d}:{current_minute:02d}"
-                
-                # 3:00 PM - Exit all profitable positions (lock gains)
-                if current_time_str >= INTRADAY_PROFIT_EXIT_TIME and profit_pct > 0:
-                    exit_info = self._exit_position(
-                        symbol, current_price, f'INTRADAY_PROFIT_EXIT (3:00 PM - Lock Gains)', full_exit=True
-                    )
-                    if exit_info:
-                        exits.append(exit_info)
-                    continue
-                
-                # 3:15 PM - Exit all positions at breakeven (if in small loss, max -0.5%)
-                if current_time_str >= INTRADAY_BREAKEVEN_EXIT_TIME and profit_pct < 0.005:
-                    # Exit at breakeven or small loss (max -0.5%)
-                    if profit_pct >= -0.005:
-                        exit_price_breakeven = entry_price  # Exit at breakeven
-                    else:
-                        exit_price_breakeven = entry_price * 0.995  # Exit at -0.5% max loss
-                    
-                    exit_info = self._exit_position(
-                        symbol, exit_price_breakeven, f'INTRADAY_BREAKEVEN_EXIT (3:15 PM - No Overnight Risk)', full_exit=True
-                    )
-                    if exit_info:
-                        exits.append(exit_info)
-                    continue
-                
-                # 3:25 PM - Force exit ALL remaining positions (no overnight risk)
-                if current_time_str >= INTRADAY_FORCE_EXIT_TIME:
-                    exit_info = self._exit_position(
-                        symbol, current_price, f'INTRADAY_FORCE_EXIT (3:25 PM - Market Close)', full_exit=True
-                    )
-                    if exit_info:
-                        exits.append(exit_info)
-                    continue
-            
-            # Priority 6: TIME-BASED exit (For POSITIONAL ONLY - max holding days)
-            # CRITICAL FIX: Swing trades should NOT use max_holding_days check
-            # Swing trades are intraday only and exit via time-based exits (3:00 PM, 3:15 PM, 3:25 PM)
-            # Only positional trades should use max_holding_days
+            max_days = position.get('max_holding_days', 1)
+
+            # Check if this is an intraday scalp trade (same day only)
+            if strategy == 'swing' and max_days == 0:
+                try:
+                    import pytz
+                    IST = pytz.timezone('Asia/Kolkata')
+                    current_time_ist = datetime.now(IST)
+                    current_hour = current_time_ist.hour
+                    current_minute = current_time_ist.minute
+                    current_time_str = f"{current_hour:02d}:{current_minute:02d}"
+
+                    # 🎯 FORCED EXIT AT 3:15 PM for intraday scalping (no overnight holds)
+                    if current_time_str >= "15:15":
+                        exit_info = self._exit_position(
+                            symbol, current_price, '🎯 INTRADAY_SCALP_CLOSE (3:15 PM - same day only)', full_exit=True
+                        )
+                        if exit_info:
+                            exits.append(exit_info)
+                        continue
+                except Exception as e:
+                    pass  # Silently skip if timezone check fails
+
+            # Priority 6: TIME-BASED exit (For ALL strategies - max holding days)
+            # MAJOR FIX: Now applies to BOTH swing (max 3 days) and positional (max 10 days)
+            # Swing trades were intraday only, now allow overnight holds with max holding period
+            # Exit only if max days reached AND not making good profit
             strategy = position.get('strategy', 'positional')
-            if strategy != 'swing' and 'entry_date' in position and 'max_holding_days' in position:
+            if 'entry_date' in position and 'max_holding_days' in position:
                 try:
                     entry_date = datetime.fromisoformat(position['entry_date'])
                     # CRITICAL FIX: Use TRADING DAYS instead of calendar days
@@ -953,8 +1013,20 @@ class PaperTrader:
                 print(f"   ⚠️  Using fallback position sizing (no historical data)")
                 position_size = self._simple_position_sizing(signal, portfolio_value, current_drawdown)
 
+            # DEBUG: Log position sizing details
+            entry_price = signal.get('entry_price', 0)
+            stop_loss = signal.get('stop_loss', 0)
+            print(f"   🔍 DEBUG: Entry={entry_price:.2f}, Stop={stop_loss:.2f}, Calculated Size=₹{position_size:,.0f}, Available Capital=₹{self.capital:,.0f}")
+            
             # Don't exceed available capital
             position_size = min(position_size, self.capital)
+            
+            if position_size <= 0:
+                print(f"   ⚠️  Position size is 0 or negative after capping!")
+                if entry_price <= 0 or stop_loss <= 0:
+                    print(f"   ❌ Invalid entry_price ({entry_price}) or stop_loss ({stop_loss})")
+                elif stop_loss >= entry_price:
+                    print(f"   ❌ Stop loss ({stop_loss}) >= Entry price ({entry_price}) - invalid!")
 
             return position_size
 

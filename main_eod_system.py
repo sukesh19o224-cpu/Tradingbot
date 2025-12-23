@@ -24,6 +24,29 @@ from src.utils.signal_validator import SignalValidator
 IST = pytz.timezone('Asia/Kolkata')
 
 
+def is_market_hours() -> bool:
+    """
+    Check if current time is within market hours (9:15 AM - 3:30 PM IST)
+
+    Returns:
+        True if market is open, False otherwise
+    """
+    now = datetime.now(IST)
+    current_time = now.time()
+
+    # Parse market hours from settings
+    market_open = dt_time(9, 15)  # 9:15 AM
+    market_close = dt_time(15, 30)  # 3:30 PM
+
+    # Check if weekday (Monday=0 to Friday=4)
+    is_weekday = now.weekday() < 5
+
+    # Check if within market hours
+    is_trading_hours = market_open <= current_time <= market_close
+
+    return is_weekday and is_trading_hours
+
+
 class EODIntradaySystem:
     """
     EOD + Intraday Trading System
@@ -217,9 +240,18 @@ class EODIntradaySystem:
             print("\n⚠️ No signals found")
             return
 
-        # Filter by minimum score (FIX: Use correct threshold for swing)
+        # Filter by minimum score (FIX: Use correct threshold for swing and mean reversion)
         swing_signals = [s for s in swing_signals if s.get('score', 0) >= MIN_SWING_SIGNAL_SCORE]
-        positional_signals = [s for s in positional_signals if s.get('score', 0) >= MIN_SIGNAL_SCORE]
+        # Use strategy-specific thresholds: MR needs 7.5, others need 7.7
+        from config.settings import MIN_SIGNAL_SCORE_MEAN_REVERSION
+        filtered_positional = []
+        for s in positional_signals:
+            score = s.get('score', 0)
+            signal_type = s.get('signal_type', 'MOMENTUM')
+            min_threshold = MIN_SIGNAL_SCORE_MEAN_REVERSION if signal_type == 'MEAN_REVERSION' else MIN_SIGNAL_SCORE
+            if score >= min_threshold:
+                filtered_positional.append(s)
+        positional_signals = filtered_positional
 
         # Sort by score (primary) and quality score (secondary tiebreaker) - take top N
         def get_sort_key(signal):
@@ -252,7 +284,13 @@ class EODIntradaySystem:
         print(f"\n{'='*70}")
         print(f"🌊 PROCESSING {len(swing_signals)} SWING SIGNALS")
         print(f"{'='*70}\n")
-        
+
+        # CRITICAL FIX: Skip swing processing if disabled
+        if not SWING_ENABLED:
+            print("⚠️ Swing trading is DISABLED (SWING_ENABLED=False)")
+            print("   Skipping all swing signals...")
+            swing_signals = []
+
         for i, signal in enumerate(swing_signals, 1):
             symbol = signal['symbol']
             signal_type = signal.get('signal_type', 'SWING')
@@ -304,40 +342,47 @@ class EODIntradaySystem:
                     print(f"   ⏭️ Skipped (already holding or insufficient capital)")
                     print()
 
-        # Process positional signals
+        # Process positional signals with SMART ALLOCATION (1 MR + 6 Momentum)
         print(f"\n{'='*70}")
-        print(f"📊 PROCESSING {len(positional_signals)} POSITIONAL SIGNALS")
+        print(f"📊 PROCESSING {len(positional_signals)} POSITIONAL SIGNALS (SMART ALLOCATION)")
         print(f"{'='*70}\n")
-        
+
+        # Filter and validate signals before smart allocation
+        validated_signals = []
+
         for i, signal in enumerate(positional_signals, 1):
             symbol = signal['symbol']
             signal_type = signal.get('signal_type', 'MOMENTUM')
             score = signal.get('score', 0)
-            
+
             print(f"{i}. {symbol} - {signal_type} (Score: {score:.1f}/10)")
 
             # Check quality filters based on signal type
             if signal_type == 'MEAN_REVERSION':
                 mean_rev_score = signal.get('mean_reversion_score', 0)
                 is_valid = signal.get('mean_reversion_valid', False)
-                
-                print(f"   📊 Mean Reversion Quality: {mean_rev_score}/100")
-                
+                # Normalize MR score to /100 (max raw score is ~209)
+                normalized_mr_score = min(100, (mean_rev_score / 209) * 100)
+
+                print(f"   📊 Mean Reversion Quality: {normalized_mr_score:.0f}/100")
+
                 if not is_valid:
-                    print(f"   ❌ REJECTED - Weak mean reversion setup (need ≥40 score)")
+                    print(f"   ❌ REJECTED - Weak mean reversion setup (need ≥22/100 normalized)")
                     print()
                     continue
                 else:
                     print(f"   ✅ PASSED - Good mean reversion setup")
-            
+
             elif signal_type == 'MOMENTUM':
                 momentum_score = signal.get('momentum_score', 0)
                 is_valid = signal.get('momentum_valid', False)
-                
-                print(f"   📊 Momentum Quality: {momentum_score}/100")
-                
+                # Normalize Momentum score to /100 (max raw score is ~212)
+                normalized_mom_score = min(100, (momentum_score / 212) * 100)
+
+                print(f"   📊 Momentum Quality: {normalized_mom_score:.0f}/100")
+
                 if not is_valid:
-                    print(f"   ❌ REJECTED - Weak momentum setup (need ≥50 score)")
+                    print(f"   ❌ REJECTED - Weak momentum setup (need ≥24/100 normalized)")
                     print()
                     continue
                 else:
@@ -345,9 +390,9 @@ class EODIntradaySystem:
             elif signal_type == 'BREAKOUT':
                 breakout_score = signal.get('breakout_score', 0)
                 is_valid = signal.get('breakout_valid', False)
-                
+
                 print(f"   📊 Breakout Quality: {breakout_score}/100")
-                
+
                 if not is_valid:
                     print(f"   ❌ REJECTED - Weak breakout setup (need ≥50 score)")
                     print()
@@ -367,18 +412,20 @@ class EODIntradaySystem:
                 print()
                 continue
 
-            if PAPER_TRADING_AUTO_EXECUTE:
-                executed = self.dual_portfolio.execute_positional_signal(signal)
+            # Signal passed all validations
+            print(f"   ✅ VALIDATED - Ready for smart allocation")
+            print()
+            validated_signals.append(signal)
 
-                if executed:
-                    # Send Discord alert
-                    if self.discord.enabled:
+        # Execute validated signals using smart 3:4 allocation
+        if validated_signals and PAPER_TRADING_AUTO_EXECUTE:
+            results = self.dual_portfolio.execute_positional_signals_smart(validated_signals)
+
+            # Send Discord alerts for executed signals
+            if self.discord.enabled:
+                for signal, executed in zip(validated_signals, results):
+                    if executed:
                         self.discord.send_positional_signal(signal)
-                    print(f"   📈 Positional trade executed")
-                    print()
-                else:
-                    print(f"   ⏭️ Skipped (already holding or insufficient capital)")
-                    print()
 
     def monitor_positions(self):
         """Monitor open positions and check for exits (legacy method - kept for compatibility)"""
@@ -387,6 +434,14 @@ class EODIntradaySystem:
 
     def monitor_swing_positions_only(self):
         """Monitor swing positions only (called every 2 minutes)"""
+        # CRITICAL FIX: Check if swing trading is enabled
+        if not SWING_ENABLED:
+            return
+
+        # CRITICAL FIX: Only monitor during market hours (9:15 AM - 3:30 PM IST)
+        if not is_market_hours():
+            return
+
         all_positions = self.dual_portfolio.get_all_open_positions()
         swing_positions = all_positions['swing']
 

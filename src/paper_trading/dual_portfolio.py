@@ -96,6 +96,128 @@ class DualPortfolio:
         # Smart replacement will handle capital/position limits automatically
         return self.positional_portfolio.execute_signal(signal)
 
+    def get_strategy_allocation_status(self) -> Dict:
+        """
+        Get current allocation status for mean reversion vs momentum
+
+        ADAPTIVE Target: Prefer 1 MR + 5 Momentum, but allow 6 Momentum if no MR available
+
+        Returns:
+            Dict with allocation counts and what's needed next
+        """
+        positions = self.positional_portfolio.positions
+
+        # Count current positions by signal type
+        mean_reversion_count = sum(1 for p in positions.values() if p.get('signal_type') == 'MEAN_REVERSION')
+        momentum_count = sum(1 for p in positions.values() if p.get('signal_type') == 'MOMENTUM')
+        total_count = len(positions)
+
+        # MOMENTUM ONLY: 6 positions, all momentum (no mean reversion)
+        target_mr = 0  # No mean reversion
+        target_momentum = 6  # All 6 momentum
+        max_total = MAX_POSITIONS  # 6
+
+        # Calculate total slots available
+        total_slots_available = max_total - total_count
+
+        # Momentum only - simple calculation
+        mr_slots_available = 0  # No MR slots
+        momentum_slots_available = total_slots_available
+
+        # Priority is always momentum (or full)
+        if total_slots_available == 0:
+            priority = 'FULL'
+        else:
+            priority = 'MOMENTUM'
+
+        return {
+            'current_mr': mean_reversion_count,
+            'current_momentum': momentum_count,
+            'current_total': total_count,
+            'target_mr': target_mr,
+            'target_momentum': target_momentum,
+            'max_total': max_total,
+            'mr_slots_available': mr_slots_available,
+            'momentum_slots_available': momentum_slots_available,
+            'total_slots_available': total_slots_available,
+            'priority': priority,
+            'mr_filled': mean_reversion_count >= target_mr,
+            'momentum_filled': momentum_count >= target_momentum,
+            'portfolio_full': total_slots_available == 0
+        }
+
+    def execute_positional_signals_smart(self, signals: List[Dict]) -> List[bool]:
+        """
+        Execute positional signals with smart 1:5 allocation (1 MR + 5 Momentum)
+
+        Intelligently fills slots based on current allocation:
+        - Prioritize filling momentum up to 5 positions
+        - Then fill mean reversion up to 1 position
+        - Maintains balance dynamically as positions exit
+
+        Args:
+            signals: List of positional signals (mixed MR and Momentum)
+
+        Returns:
+            List of execution results (True/False for each signal) - MATCHES INPUT ORDER
+        """
+        # CRITICAL FIX: Create results dict to map symbol -> execution status
+        # This ensures Discord alerts match the executed signals correctly
+        execution_map = {signal['symbol']: False for signal in signals}
+
+        # Separate signals by type
+        mr_signals = [s for s in signals if s.get('signal_type') == 'MEAN_REVERSION']
+        momentum_signals = [s for s in signals if s.get('signal_type') == 'MOMENTUM']
+
+        # Sort each by score (highest first)
+        mr_signals.sort(key=lambda x: x.get('score', 0), reverse=True)
+        momentum_signals.sort(key=lambda x: x.get('score', 0), reverse=True)
+
+        # CRITICAL: Add context flag to ALL signals indicating if MR is available
+        # This tells paper_trader whether to reserve the 6th slot or allow 6 momentum
+        mr_available = len(mr_signals) > 0
+        for signal in signals:
+            signal['_mr_signals_available'] = mr_available
+
+        print(f"\n📊 Allocation Status (MOMENTUM ONLY):")
+        allocation = self.get_strategy_allocation_status()
+        print(f"   Current: {allocation['current_momentum']} Momentum = {allocation['current_total']}/6")
+        print(f"   Target: 6 Momentum")
+        print(f"   Available: {allocation['momentum_slots_available']} Momentum slots")
+        print(f"   Priority: {allocation['priority']}")
+
+        # Execute signals - MOMENTUM ONLY
+        executed_count = 0
+
+        # Fill all 6 slots with momentum
+        if allocation['momentum_slots_available'] > 0 and momentum_signals:
+            slots_to_fill = allocation['momentum_slots_available']
+            print(f"\n🎯 Filling {slots_to_fill} MOMENTUM slots...")
+            for signal in momentum_signals[:slots_to_fill]:
+                symbol = signal['symbol']
+                print(f"\n   Attempting to execute {symbol} (MOMENTUM)...")
+                if self.execute_positional_signal(signal):
+                    executed_count += 1
+                    execution_map[signal['symbol']] = True
+                    print(f"   ✅ {symbol} executed successfully")
+                else:
+                    print(f"   ❌ {symbol} execution failed (check logs above)")
+
+                # Update allocation after each execution
+                allocation = self.get_strategy_allocation_status()
+                if allocation['portfolio_full']:
+                    print(f"   Portfolio full (6/6), stopping execution")
+                    break
+
+        print(f"\n✅ Smart allocation complete: {executed_count} signals executed")
+        final_allocation = self.get_strategy_allocation_status()
+        print(f"   Final: {final_allocation['current_mr']} MR + {final_allocation['current_momentum']} Momentum = {final_allocation['current_total']}/6")
+
+        # CRITICAL FIX: Return results in SAME ORDER as input signals
+        # This ensures zip() in main_eod_system.py correctly pairs signals with execution status
+        results = [execution_map[signal['symbol']] for signal in signals]
+        return results
+
     def monitor_swing_positions(self, current_prices: Dict[str, float]) -> tuple[List[Dict], List[Dict]]:
         """
         Monitor swing trading positions

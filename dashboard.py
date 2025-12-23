@@ -133,12 +133,18 @@ def display_portfolio_summary(data, current_prices):
     # Calculate current value of positions
     swing_current_value = 0
     for symbol, pos in swing_positions.items():
-        current_price = current_prices.get(symbol, pos.get('entry_price', 0))
+        current_price = current_prices.get(symbol, 0)
+        # CRITICAL FIX: If price fetch failed (0 or negative), use entry price as fallback
+        if current_price <= 0:
+            current_price = pos.get('entry_price', 0)
         swing_current_value += pos.get('shares', 0) * current_price
 
     positional_current_value = 0
     for symbol, pos in positional_positions.items():
-        current_price = current_prices.get(symbol, pos.get('entry_price', 0))
+        current_price = current_prices.get(symbol, 0)
+        # CRITICAL FIX: If price fetch failed (0 or negative), use entry price as fallback
+        if current_price <= 0:
+            current_price = pos.get('entry_price', 0)
         positional_current_value += pos.get('shares', 0) * current_price
 
     total_current_value = swing_current_value + positional_current_value
@@ -241,6 +247,10 @@ def display_portfolio_summary(data, current_prices):
         realized_color = "positive" if swing_realized_pnl >= 0 else "negative"
         st.markdown(f"**Realized P&L**")
         st.markdown(f"<span class='{realized_color}'>₹{swing_realized_pnl:+,.0f}</span>",
+                   unsafe_allow_html=True)
+        unrealized_color = "positive" if swing_unrealized_pnl >= 0 else "negative"
+        st.markdown(f"**Unrealized P&L**")
+        st.markdown(f"<span class='{unrealized_color}'>₹{swing_unrealized_pnl:+,.0f}</span>",
                    unsafe_allow_html=True)
     
     with col6:
@@ -356,6 +366,10 @@ def display_portfolio_summary(data, current_prices):
         st.markdown(f"**Realized P&L**")
         st.markdown(f"<span class='{realized_color}'>₹{positional_realized_pnl:+,.0f}</span>",
                    unsafe_allow_html=True)
+        unrealized_color = "positive" if positional_unrealized_pnl >= 0 else "negative"
+        st.markdown(f"**Unrealized P&L**")
+        st.markdown(f"<span class='{unrealized_color}'>₹{positional_unrealized_pnl:+,.0f}</span>",
+                   unsafe_allow_html=True)
     
     with col6:
         st.metric("📝 Total Trades", positional_total_trades)
@@ -380,8 +394,10 @@ def display_portfolio_summary(data, current_prices):
     total_positions = len(swing_positions) + len(positional_positions)
     total_pnl = total_portfolio_value - total_initial
     total_pnl_pct = (total_pnl / total_initial * 100) if total_initial > 0 else 0
+    total_realized_pnl = realized_pnl
+    total_unrealized_pnl = swing_unrealized_pnl + positional_unrealized_pnl
     
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.metric("💰 Total Capital", f"₹{total_initial:,.0f}")
     with col2:
@@ -392,6 +408,15 @@ def display_portfolio_summary(data, current_prices):
         st.markdown(f"<span class='{pnl_color}'>₹{total_pnl:+,.0f} ({total_pnl_pct:+.2f}%)</span>",
                    unsafe_allow_html=True)
     with col4:
+        realized_color = "positive" if total_realized_pnl >= 0 else "negative"
+        st.markdown(f"**Realized P&L**")
+        st.markdown(f"<span class='{realized_color}'>₹{total_realized_pnl:+,.0f}</span>",
+                   unsafe_allow_html=True)
+        unrealized_color = "positive" if total_unrealized_pnl >= 0 else "negative"
+        st.markdown(f"**Unrealized P&L**")
+        st.markdown(f"<span class='{unrealized_color}'>₹{total_unrealized_pnl:+,.0f}</span>",
+                   unsafe_allow_html=True)
+    with col5:
         st.metric("📊 Total Positions", total_positions)
 
 def display_open_positions(data, current_prices):
@@ -417,9 +442,12 @@ def display_open_positions(data, current_prices):
         st.markdown("### 🔥 Swing Positions")
 
         for symbol, pos in swing_positions.items():
-            # Get current price
-            current_price = current_prices.get(symbol, pos.get('entry_price', 0))
+            # Get current price with fallback if fetch failed
+            current_price = current_prices.get(symbol, 0)
             entry_price = pos.get('entry_price', 0)
+            # CRITICAL FIX: If price fetch failed (0 or negative), use entry price as fallback
+            if current_price <= 0:
+                current_price = entry_price
             shares = pos.get('shares', 0)
             initial_shares = pos.get('initial_shares', shares)
 
@@ -559,9 +587,12 @@ def display_open_positions(data, current_prices):
         st.markdown("### 📈 Positional Positions")
 
         for symbol, pos in positional_positions.items():
-            # Get current price
-            current_price = current_prices.get(symbol, pos.get('entry_price', 0))
+            # Get current price with fallback if fetch failed
+            current_price = current_prices.get(symbol, 0)
             entry_price = pos.get('entry_price', 0)
+            # CRITICAL FIX: If price fetch failed (0 or negative), use entry price as fallback
+            if current_price <= 0:
+                current_price = entry_price
             shares = pos.get('shares', 0)
             initial_shares = pos.get('initial_shares', shares)
 
@@ -696,6 +727,132 @@ def display_open_positions(data, current_prices):
                         stop_loss_pct = ((entry_price - current_stop_loss) / entry_price * 100) if entry_price > 0 else 0
                         st.write(f"Stop Loss: ₹{current_stop_loss:.2f} ({stop_loss_pct:.2f}%)")
 
+def display_holding_pnl(data, current_prices):
+    """Display Holding P&L - Unrealized gains/losses for open positions"""
+    if not data:
+        return
+
+    swing = data.get('swing', {})
+    positional = data.get('positional', {})
+
+    swing_positions = swing.get('positions', {})
+    positional_positions = positional.get('positions', {})
+
+    st.markdown("---")
+    st.subheader("💰 HOLDING P&L (Unrealized)")
+
+    if not swing_positions and not positional_positions:
+        st.info("No open positions to show P&L.")
+        return
+
+    # Prepare data for table
+    holding_data = []
+
+    # Add swing positions
+    for symbol, pos in swing_positions.items():
+        current_price = current_prices.get(symbol, 0)
+        entry_price = pos.get('entry_price', 0)
+        # CRITICAL FIX: If price fetch failed (0 or negative), use entry price as fallback
+        if current_price <= 0:
+            current_price = entry_price
+        shares = pos.get('shares', 0)
+        invested = pos.get('cost', entry_price * shares)
+        current_value = current_price * shares
+        pnl = current_value - invested
+        pnl_pct = (pnl / invested * 100) if invested > 0 else 0
+
+        holding_data.append({
+            'Symbol': symbol.replace('.NS', ''),
+            'Type': '🔥 Swing',
+            'Shares': shares,
+            'Entry': f"₹{entry_price:.2f}",
+            'Current': f"₹{current_price:.2f}",
+            'Invested': f"₹{invested:,.0f}",
+            'Current Value': f"₹{current_value:,.0f}",
+            'P&L': f"₹{pnl:+,.0f}",
+            'P&L %': f"{pnl_pct:+.2f}%",
+            '_pnl_raw': pnl,  # For sorting
+            '_pnl_pct_raw': pnl_pct
+        })
+
+    # Add positional positions
+    for symbol, pos in positional_positions.items():
+        current_price = current_prices.get(symbol, 0)
+        entry_price = pos.get('entry_price', 0)
+        # CRITICAL FIX: If price fetch failed (0 or negative), use entry price as fallback
+        if current_price <= 0:
+            current_price = entry_price
+        shares = pos.get('shares', 0)
+        invested = pos.get('cost', entry_price * shares)
+        current_value = current_price * shares
+        pnl = current_value - invested
+        pnl_pct = (pnl / invested * 100) if invested > 0 else 0
+
+        holding_data.append({
+            'Symbol': symbol.replace('.NS', ''),
+            'Type': '📈 Positional',
+            'Shares': shares,
+            'Entry': f"₹{entry_price:.2f}",
+            'Current': f"₹{current_price:.2f}",
+            'Invested': f"₹{invested:,.0f}",
+            'Current Value': f"₹{current_value:,.0f}",
+            'P&L': f"₹{pnl:+,.0f}",
+            'P&L %': f"{pnl_pct:+.2f}%",
+            '_pnl_raw': pnl,
+            '_pnl_pct_raw': pnl_pct
+        })
+
+    # Sort by P&L percentage (best to worst)
+    holding_data.sort(key=lambda x: x['_pnl_pct_raw'], reverse=True)
+
+    # Calculate totals
+    total_invested = sum(float(item['Invested'].replace('₹', '').replace(',', '')) for item in holding_data)
+    total_current = sum(float(item['Current Value'].replace('₹', '').replace(',', '')) for item in holding_data)
+    total_pnl = sum(item['_pnl_raw'] for item in holding_data)
+    total_pnl_pct = (total_pnl / total_invested * 100) if total_invested > 0 else 0
+
+    # Display summary cards
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("💼 Total Invested", f"₹{total_invested:,.0f}")
+    with col2:
+        st.metric("📊 Current Value", f"₹{total_current:,.0f}")
+    with col3:
+        pnl_color = "positive" if total_pnl >= 0 else "negative"
+        st.markdown(f"**💰 Total P&L**")
+        st.markdown(f"<span class='{pnl_color} big-metric'>₹{total_pnl:+,.0f}</span>", unsafe_allow_html=True)
+    with col4:
+        pnl_color = "positive" if total_pnl_pct >= 0 else "negative"
+        st.markdown(f"**📈 Total P&L %**")
+        st.markdown(f"<span class='{pnl_color} big-metric'>{total_pnl_pct:+.2f}%</span>", unsafe_allow_html=True)
+
+    st.markdown("### 📋 Position-wise P&L")
+
+    # Display table with color-coded P&L
+    for item in holding_data:
+        cols = st.columns([2, 2, 1, 2, 2, 2, 2, 2, 2])
+
+        with cols[0]:
+            st.write(f"**{item['Symbol']}**")
+        with cols[1]:
+            st.write(item['Type'])
+        with cols[2]:
+            st.write(item['Shares'])
+        with cols[3]:
+            st.write(item['Entry'])
+        with cols[4]:
+            st.write(item['Current'])
+        with cols[5]:
+            st.write(item['Invested'])
+        with cols[6]:
+            st.write(item['Current Value'])
+        with cols[7]:
+            pnl_color = "positive" if item['_pnl_raw'] >= 0 else "negative"
+            st.markdown(f"<span class='{pnl_color}'>{item['P&L']}</span>", unsafe_allow_html=True)
+        with cols[8]:
+            pnl_color = "positive" if item['_pnl_pct_raw'] >= 0 else "negative"
+            st.markdown(f"<span class='{pnl_color}'>{item['P&L %']}</span>", unsafe_allow_html=True)
+
 def display_trade_history(data):
     """Display recent trade history"""
     if not data:
@@ -823,6 +980,7 @@ def main():
         # Display sections
         display_portfolio_summary(data, current_prices)
         display_open_positions(data, current_prices)
+        display_holding_pnl(data, current_prices)
         display_trade_history(data)
     else:
         st.warning("No portfolio data available")

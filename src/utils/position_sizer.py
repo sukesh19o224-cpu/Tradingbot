@@ -94,6 +94,7 @@ class PositionSizer:
 
             if risk_per_share <= 0:
                 # Invalid stop loss (above entry price)
+                print(f"   ⚠️  Invalid stop loss: Entry={entry_price:.2f}, Stop={stop_loss:.2f}, Risk={risk_per_share:.2f}")
                 return 0
 
             # Risk amount (in rupees) - this is what we want to risk per trade
@@ -186,7 +187,8 @@ class PositionSizer:
         self,
         position_size: float,
         signal_score: float,
-        strategy: str = 'positional'
+        strategy: str = 'positional',
+        mqs_score: Optional[float] = None
     ) -> float:
         """
         Adjust position size based on signal quality
@@ -195,12 +197,13 @@ class PositionSizer:
             position_size: Base position size
             signal_score: Signal score (0-10)
             strategy: 'swing' or 'positional' - uses different thresholds
+            mqs_score: Optional MQS score (0-8) for additional quality adjustment
 
         Returns:
             Quality-adjusted position size
         """
-        from config.settings import MIN_SIGNAL_SCORE, MIN_SWING_SIGNAL_SCORE
-        
+        from config.settings import MIN_SIGNAL_SCORE, MIN_SWING_SIGNAL_SCORE, MQS_CONFIG, USE_MQS_QUALITY_FILTER
+
         # Different thresholds for swing vs positional
         if strategy == 'swing':
             min_score = MIN_SWING_SIGNAL_SCORE  # 5.5 for swing
@@ -212,11 +215,45 @@ class PositionSizer:
             min_score = MIN_SIGNAL_SCORE  # 7.0 for positional
             if signal_score < min_score:
                 return 0  # Skip below positional threshold
-            # For positional: 0.5x at 7, 1.0x at 8, 1.5x at 9, 2.0x at 10
-        quality_multiplier = 0.5 + (signal_score - 7) * 0.5
-        
-        quality_multiplier = min(quality_multiplier, 2.0)  # Cap at 2x
-        return position_size * quality_multiplier
+            # FIXED: For positional: 0.75x at 7, 0.85x at 8, 0.95x at 9, 1.0x at 10
+            # Removed aggressive 2x multiplier - position sizing should be conservative
+            quality_multiplier = 0.75 + (signal_score - 7) * 0.083  # Linear from 0.75 to 1.0
+
+        quality_multiplier = min(quality_multiplier, 1.0)  # FIXED: Cap at 1x (no oversizing)
+        base_adjusted = position_size * quality_multiplier
+
+        # =========================================================================
+        # 🎯 MQS QUALITY ADJUSTMENT (if enabled and available)
+        # =========================================================================
+        if USE_MQS_QUALITY_FILTER and mqs_score is not None and mqs_score > 0:
+            use_mqs_sizing = MQS_CONFIG.get('USE_MQS_POSITION_SIZING', True)
+
+            if use_mqs_sizing:
+                # MQS-based position sizing multiplier
+                # 7-8: 100% (1.0x)
+                # 5-6: 75% (0.75x)
+                # 3-4: 50% (0.5x)
+                # <3: Already filtered out
+
+                if mqs_score >= MQS_CONFIG['MQS_HIGH_CONVICTION']:  # ≥7.0
+                    mqs_multiplier = 1.0  # Full position (100%)
+                elif mqs_score >= MQS_CONFIG['MQS_GOOD_SETUP']:  # 5.0-6.9
+                    mqs_multiplier = 0.75  # Reduced position (75%)
+                elif mqs_score >= MQS_CONFIG['MQS_CAUTIOUS']:  # 3.0-4.9
+                    mqs_multiplier = 0.5  # Half position (50%)
+                else:
+                    mqs_multiplier = 0.25  # Minimal position (25%) - should be filtered already
+
+                # Apply MQS adjustment
+                final_size = base_adjusted * mqs_multiplier
+
+                # Show adjustment if significant
+                if abs(mqs_multiplier - 1.0) > 0.01:
+                    print(f"   🎯 MQS Adjustment: Score {mqs_score:.1f}/8 → {mqs_multiplier*100:.0f}% position size")
+
+                return final_size
+
+        return base_adjusted
 
     def calculate_complete_position_size(
         self,
@@ -249,6 +286,8 @@ class PositionSizer:
         base_size = self.calculate_volatility_based_size(
             portfolio_value, signal, df
         )
+        if base_size <= 0:
+            print(f"   ⚠️  Base size is 0 or negative: {base_size:.2f}")
 
         # Step 2: Drawdown adjustment
         size_after_drawdown = self.adjust_for_drawdown(base_size, current_drawdown)
@@ -256,10 +295,21 @@ class PositionSizer:
         # Step 3: Quality adjustment (with strategy-aware threshold)
         signal_score = signal.get('score', 7.0)
         strategy = signal.get('strategy', 'positional')  # Get strategy type
-        final_size = self.adjust_for_quality(size_after_drawdown, signal_score, strategy)
+        mqs_score = signal.get('mqs_score')  # Get MQS score if available
+        final_size = self.adjust_for_quality(size_after_drawdown, signal_score, strategy, mqs_score)
+        if final_size <= 0:
+            print(f"   ⚠️  Quality adjustment returned 0 (score={signal_score:.1f}, strategy={strategy})")
 
-        # Step 4: Don't exceed available capital
+        # Step 4: Re-apply MAX_POSITION_SIZE cap (quality adjustment might have increased it)
+        max_position = portfolio_value * MAX_POSITION_SIZE
+        if final_size > max_position:
+            print(f"   📊 Position capped: ₹{final_size:,.0f} → ₹{max_position:,.0f} (20% max)")
+            final_size = max_position
+
+        # Step 5: Don't exceed available capital
         final_size = min(final_size, available_capital)
+        if final_size <= 0:
+            print(f"   ⚠️  Final size is 0 (available_capital={available_capital:,.0f})")
 
         return final_size
 

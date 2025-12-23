@@ -16,6 +16,7 @@ from src.strategies.multitimeframe_analyzer import MultiTimeframeAnalyzer
 from src.strategies.market_regime_detector import MarketRegimeDetector
 from src.strategies.sector_rotation_tracker import SectorRotationTracker
 from src.strategies.bank_nifty_adjuster import BankNiftyAdjuster
+from src.strategies.mqs_integrator import get_mqs_integrator
 from config.settings import *
 
 
@@ -42,38 +43,50 @@ class SequentialScanner:
         self.signal_generator = SignalGenerator()
         self.mtf_analyzer = MultiTimeframeAnalyzer()
         self.api_delay = api_delay
-        
+
         # Market Regime Detection (Professional Feature)
         self.regime_detector = MarketRegimeDetector() if MARKET_REGIME_DETECTION_ENABLED else None
         self.current_regime = None
         self.regime_adjustments = None
-        
+
         # Sector Rotation Tracking (India-Specific)
         self.sector_tracker = SectorRotationTracker() if SECTOR_ROTATION_ENABLED else None
         self.leading_sectors = []
         self.lagging_sectors = []
-        
+
         # Bank Nifty Volatility Adjustment (India-Specific)
         self.bank_adjuster = BankNiftyAdjuster() if BANK_NIFTY_VOLATILITY_ADJUSTMENT else None
 
+        # MQS Quality Filter (Advanced Quality Scoring)
+        # FIXED: Import directly to avoid caching issues
+        from config.settings import USE_MQS_QUALITY_FILTER, MQS_MIN_THRESHOLD
+        self.use_mqs = USE_MQS_QUALITY_FILTER
+        self.mqs_integrator = get_mqs_integrator() if self.use_mqs else None
+        self.mqs_min_threshold = MQS_MIN_THRESHOLD
+
         print(f"🚀 Sequential Scanner initialized (NO threads, 100% safe, OPTIMIZED)")
         print(f"⏱️ API delay: {api_delay}s between stocks (optimized for speed)")
-        
+
         # Feature status
         if MARKET_REGIME_DETECTION_ENABLED:
             print(f"📊 Market Regime Detection: ENABLED ✅")
         else:
             print(f"📊 Market Regime Detection: DISABLED")
-            
+
         if SECTOR_ROTATION_ENABLED:
             print(f"🔄 Sector Rotation Tracking: ENABLED ✅")
         else:
             print(f"🔄 Sector Rotation Tracking: DISABLED")
-            
+
         if BANK_NIFTY_VOLATILITY_ADJUSTMENT:
             print(f"🏦 Bank Nifty Adjustment: ENABLED ✅")
         else:
             print(f"🏦 Bank Nifty Adjustment: DISABLED")
+
+        if self.use_mqs:
+            print(f"🎯 MQS Quality Filter: ENABLED ✅ (Min threshold: {self.mqs_min_threshold}/8)")
+        else:
+            print(f"🎯 MQS Quality Filter: DISABLED")
 
     def scan_all_stocks(self, stocks: List[str], monitor_callback=None, monitor_callback_data=None) -> Dict:
         """
@@ -206,8 +219,12 @@ class SequentialScanner:
                         signal_score = pos_sig.get('score', 0)
                         reasons = pos_sig.get('mean_reversion_reasons', [])
                         top_reason = reasons[0] if reasons else 'Quality filters'
-                        print(f"\n   📊 {signal_type} | Score: {signal_score:.1f}/10 | Quality: {mean_rev_score}/100 {'✅' if is_valid else '❌'}")
+                        # Normalize MR score to /100 (max raw score is ~209)
+                        normalized_mr_score = min(100, (mean_rev_score / 209) * 100)
+                        print(f"\n   📊 {signal_type} | Score: {signal_score:.1f}/10 | Quality: {normalized_mr_score:.0f}/100 (raw:{mean_rev_score:.0f}) {'✅' if is_valid else '❌'}")
                         print(f"      💡 {top_reason}", end='', flush=True)
+                        if not is_valid:
+                            print(f" [Need raw≥42 for perfect or ≥47 for regular bounce]", end='', flush=True)
                         results.append(f"{'✅' if is_valid else '❌'} POSITIONAL")
                         passed_quality = is_valid
                     elif signal_type == 'MOMENTUM':
@@ -216,7 +233,9 @@ class SequentialScanner:
                         signal_score = pos_sig.get('score', 0)
                         reasons = pos_sig.get('momentum_reasons', [])
                         top_reason = reasons[0] if reasons else 'Quality filters'
-                        print(f"\n   📊 {signal_type} | Score: {signal_score:.1f}/10 | Quality: {momentum_score}/100 {'✅' if is_valid else '❌'}")
+                        # Normalize Momentum score to /100 (max raw score is ~212)
+                        normalized_mom_score = min(100, (momentum_score / 212) * 100)
+                        print(f"\n   📊 {signal_type} | Score: {signal_score:.1f}/10 | Quality: {normalized_mom_score:.0f}/100 {'✅' if is_valid else '❌'}")
                         print(f"      💡 {top_reason}", end='', flush=True)
                         results.append(f"{'✅' if is_valid else '❌'} POSITIONAL")
                         passed_quality = is_valid
@@ -285,20 +304,106 @@ class SequentialScanner:
         print(f"📈 Positional Signals: {stats['positional_found']}")
         print(f"⚡ Total Qualified: {len(stats['qualified_stocks'])} stocks")
 
+        # =========================================================================
+        # 🎯 MQS QUALITY FILTER - Second pass quality check
+        # =========================================================================
+        if self.use_mqs and self.mqs_integrator and len(positional_signals) > 0:
+            print(f"\n🎯 Applying MQS Quality Filter to top {min(15, len(positional_signals))} candidates...")
+
+            # Apply MQS only to top 15 candidates (saves time)
+            top_candidates = sorted(positional_signals, key=lambda x: x.get('score', 0), reverse=True)[:15]
+
+            # Enhance candidates with MQS
+            enhanced_candidates = []
+            for sig in top_candidates:
+                try:
+                    # Get daily data (should be in signal already)
+                    daily_df = sig.get('daily_df')
+                    if daily_df is None:
+                        # If not in signal, fetch it
+                        data_result = self.data_fetcher.get_stock_data_dual(sig['symbol'], verbose=False)
+                        daily_df = data_result.get('daily') if data_result else None
+
+                    if daily_df is not None:
+                        # Enhance with MQS
+                        enhanced_sig = self.mqs_integrator.enhance_signal_with_mqs(
+                            symbol=sig['symbol'],
+                            daily_df=daily_df,
+                            signal_data=sig,
+                            sector=sig.get('sector')
+                        )
+                        enhanced_candidates.append(enhanced_sig)
+                        print(f"   ✅ {sig['symbol']:15s} → MQS: {enhanced_sig.get('mqs_score', 0):.1f}/8")
+                    else:
+                        # If no data, add without MQS
+                        sig['mqs_score'] = 0
+                        sig['mqs_recommendation'] = 'NO_DATA'
+                        enhanced_candidates.append(sig)
+                        print(f"   ⚠️  {sig['symbol']:15s} → No data for MQS")
+
+                except Exception as e:
+                    # On error, add without MQS
+                    sig['mqs_score'] = 0
+                    sig['mqs_recommendation'] = 'ERROR'
+                    enhanced_candidates.append(sig)
+                    print(f"   ❌ {sig['symbol']:15s} → MQS error: {str(e)[:50]}")
+
+            # Replace top candidates with enhanced versions
+            enhanced_dict = {sig['symbol']: sig for sig in enhanced_candidates}
+            positional_signals = [enhanced_dict.get(sig['symbol'], sig) for sig in positional_signals]
+
+            # Filter by MQS threshold
+            before_filter = len(positional_signals)
+            positional_signals = [s for s in positional_signals
+                                if not s.get('mqs_reject', False)]
+
+            # Show MQS filtering results
+            if before_filter > len(positional_signals):
+                print(f"   🎯 MQS Filter: {before_filter} → {len(positional_signals)} signals (rejected {before_filter - len(positional_signals)} low quality)")
+
+            # Show top 5 by MQS score
+            top_by_mqs = sorted([s for s in positional_signals if s.get('mqs_score', 0) > 0],
+                              key=lambda x: x.get('mqs_score', 0), reverse=True)[:5]
+
+            if top_by_mqs:
+                print(f"   📊 Top 5 by MQS:")
+                for i, sig in enumerate(top_by_mqs, 1):
+                    mqs_score = sig.get('mqs_score', 0)
+                    tech_score = sig.get('score', 0)
+                    print(f"      {i}. {sig['symbol']:15s} MQS:{mqs_score:4.1f}/8  Tech:{tech_score:6.1f}  [{sig.get('mqs_recommendation', 'N/A')}]")
+
         # CRITICAL FIX: Sort signals by score (highest first) and take top N
         # This ensures we get BEST quality signals, not first-found signals
 
         # Sort swing signals by score (descending)
         swing_signals = sorted(swing_signals, key=lambda x: x.get('score', 0), reverse=True)
 
-        # Sort positional signals by score (descending)
-        positional_signals = sorted(positional_signals, key=lambda x: x.get('score', 0), reverse=True)
+        # ADAPTIVE ALLOCATION: 6 positions max - prefer 1 MR + 5 Momentum, but fill with momentum if no MR
+        # Portfolio: 6 positions max (ideally 5 momentum + 1 mean reversion) with equal ₹8.5K allocation
+
+        # Separate positional signals by type
+        mr_signals = [s for s in positional_signals if s.get('signal_type') == 'MEAN_REVERSION']
+        momentum_signals = [s for s in positional_signals if s.get('signal_type') == 'MOMENTUM']
+        other_signals = [s for s in positional_signals if s.get('signal_type') not in ['MEAN_REVERSION', 'MOMENTUM']]
+
+        # Sort each category by score
+        mr_signals = sorted(mr_signals, key=lambda x: x.get('score', 0), reverse=True)
+        momentum_signals = sorted(momentum_signals, key=lambda x: x.get('score', 0), reverse=True)
+        other_signals = sorted(other_signals, key=lambda x: x.get('score', 0), reverse=True)
+
+        # MOMENTUM ONLY: 6 positions, all momentum (no mean reversion)
+        top_mr = []  # No mean reversion
+        top_momentum = momentum_signals[:6]  # All 6 are momentum
+        allocation_msg = f"6 Momentum (MR disabled)"
+
+        # Combine: Momentum only
+        positional_signals = top_momentum + other_signals
 
         # Take only top N signals (as per config)
         from config.settings import MAX_SWING_SIGNALS_PER_SCAN, MAX_POSITIONAL_SIGNALS_PER_SCAN
 
         original_swing_count = len(swing_signals)
-        original_positional_count = len(positional_signals)
+        original_positional_count = len(mr_signals) + len(momentum_signals) + len(other_signals)
 
         swing_signals = swing_signals[:MAX_SWING_SIGNALS_PER_SCAN]
         positional_signals = positional_signals[:MAX_POSITIONAL_SIGNALS_PER_SCAN]
@@ -306,8 +411,17 @@ class SequentialScanner:
         # Show filtering info
         if original_swing_count > len(swing_signals):
             print(f"\n📊 Filtered swing signals: {original_swing_count} → {len(swing_signals)} (top {len(swing_signals)} by score)")
-        if original_positional_count > len(positional_signals):
-            print(f"📊 Filtered positional signals: {original_positional_count} → {len(positional_signals)} (top {len(positional_signals)} by score)")
+
+        print(f"📊 Positional signals ranked with ADAPTIVE allocation:")
+        print(f"   Allocation: {allocation_msg}")
+        print(f"   Mean Reversion: {len(top_mr)} signals")
+        print(f"   Momentum: {len(top_momentum)} signals")
+        print(f"   Total: {len(top_mr) + len(top_momentum)} signals ready for equal ₹8.5K allocation")
+
+        # DETAILED RANKINGS DISPLAY - Show strategy-specific top 5
+        # CRITICAL: Pass ORIGINAL mr_signals and momentum_signals (not trimmed positional_signals)
+        # This allows display of ALL mean reversion candidates, not just the 1 selected
+        self._print_detailed_rankings(mr_signals, momentum_signals, positional_signals)
 
         return {
             'swing_signals': swing_signals,
@@ -531,9 +645,10 @@ class SequentialScanner:
                 quality_score = mtf_result.get('breakout_score', 0)
                 if quality_score < 45:
                     return False
-            # MEAN_REVERSION: ADX ≥18 (pullback = weaker trend temporarily)
+            # MEAN_REVERSION: ADX ≥12 (OPTIMIZED - pullback = weaker trend is NORMAL for mean reversion)
+            # Mean reversion works BEST with ADX 12-20 (moderate pullback in uptrend)
             elif signal_type == 'MEAN_REVERSION':
-                if adx < 18:
+                if adx < 12:
                     return False
             # MOMENTUM: ADX ≥22 (strong consistent trend)
             else:
@@ -548,11 +663,14 @@ class SequentialScanner:
             if not mtf_result.get('uptrend', False):
                 return False
 
-            # Signal strength - must meet MIN_SIGNAL_SCORE (7.0 for positional)
-            # CRITICAL FIX: Use MIN_SIGNAL_SCORE instead of hardcoded 6.5
-            # This ensures consistency with position sizing and validation checks
+            # Signal strength - must meet MIN_SIGNAL_SCORE (7.7 for positional from config)
+            # MEAN REVERSION gets slightly lower threshold (7.5) due to pullback nature
+            from config.settings import MIN_SIGNAL_SCORE_MEAN_REVERSION
             signal_score = mtf_result.get('signal_score', 0)
-            if signal_score < MIN_SIGNAL_SCORE:  # 7.0 for positional
+            signal_type = mtf_result.get('signal_type', 'MOMENTUM')
+
+            min_threshold = MIN_SIGNAL_SCORE_MEAN_REVERSION if signal_type == 'MEAN_REVERSION' else MIN_SIGNAL_SCORE
+            if signal_score < min_threshold:
                 return False
 
             return True
@@ -735,6 +853,8 @@ class SequentialScanner:
                 atr_stop_pct = (atr * ATR_MULTIPLIER_SWING) / entry_price
                 # Clamp between swing-specific min and max (tight for quick trades)
                 stop_loss_pct = max(ATR_MIN_STOP_LOSS_SWING, min(atr_stop_pct, ATR_MAX_STOP_LOSS_SWING))
+                # CRITICAL FIX: Ensure stop_loss_pct is never > 1.0 (would make stop_loss negative)
+                stop_loss_pct = min(stop_loss_pct, 0.99)  # Cap at 99% max
             else:
                 # Fixed percentage stop loss (fallback)
                 stop_loss_pct = SWING_STOP_LOSS
@@ -742,6 +862,12 @@ class SequentialScanner:
             # Use SWING_TARGETS from config (high-frequency: 1%, 2%, 3%)
             from config.settings import SWING_TARGETS
             stop_loss = entry_price * (1 - stop_loss_pct)
+            
+            # SAFETY CHECK: Ensure stop_loss is always below entry_price
+            if stop_loss >= entry_price:
+                # Emergency fallback: Use fixed SWING_STOP_LOSS
+                print(f"   ⚠️ ATR stop loss invalid for swing, using fixed {SWING_STOP_LOSS*100:.1f}%")
+                stop_loss = entry_price * (1 - SWING_STOP_LOSS)
             targets = SWING_TARGETS  # Now: [0.01, 0.02, 0.03] for quick profits
             
             target1 = entry_price * (1 + targets[0])
@@ -767,10 +893,23 @@ class SequentialScanner:
                 atr_stop_pct = (atr * ATR_MULTIPLIER_POSITIONAL) / entry_price
                 # Clamp between positional-specific min and max (wider: 2-6% allows proper 2.5x ATR calculation)
                 stop_loss_pct = max(ATR_MIN_STOP_LOSS_POSITIONAL, min(atr_stop_pct, ATR_MAX_STOP_LOSS_POSITIONAL))
+                # CRITICAL FIX: Ensure stop_loss_pct is never > 1.0 (would make stop_loss negative)
+                stop_loss_pct = min(stop_loss_pct, 0.99)  # Cap at 99% max
                 stop_loss = entry_price * (1 - stop_loss_pct)
+                # SAFETY CHECK: Ensure stop_loss is always below entry_price
+                if stop_loss >= entry_price:
+                    # Fallback to fixed percentage if ATR calculation is invalid
+                    print(f"   ⚠️ ATR stop loss invalid (stop={stop_loss:.2f} >= entry={entry_price:.2f}), using fixed {strategy_config['STOP_LOSS']*100:.1f}%")
+                    stop_loss = entry_price * (1 - strategy_config['STOP_LOSS'])
             else:
                 # Fixed percentage stop loss (fallback)
                 stop_loss = entry_price * (1 - strategy_config['STOP_LOSS'])
+            
+            # FINAL SAFETY CHECK: Ensure stop_loss is always valid
+            if stop_loss >= entry_price:
+                # Emergency fallback: Use 5% stop loss
+                print(f"   ⚠️ Stop loss still invalid (stop={stop_loss:.2f} >= entry={entry_price:.2f}), using 5% emergency stop")
+                stop_loss = entry_price * 0.95
             target1 = entry_price * (1 + strategy_config['TARGETS'][0])
             target2 = entry_price * (1 + strategy_config['TARGETS'][1])
             target3 = entry_price * (1 + strategy_config['TARGETS'][2])
@@ -805,32 +944,18 @@ class SequentialScanner:
         else:
             allocated_capital = INITIAL_CAPITAL * 0.70  # 70% for positional
 
-        # Base position size (25% max per position)
-        max_position = allocated_capital * MAX_POSITION_SIZE
+        # EQUAL DISTRIBUTION: Fixed position size (16.7% per position for 6 positions)
+        # No ATR-based sizing, no quality multiplier - simple equal allocation
+        max_position = allocated_capital * MAX_POSITION_SIZE  # 16.7% of allocated capital
 
-        # Risk-based sizing (2% max risk per trade)
+        # Risk check (ensure stop loss is reasonable, but don't use it for sizing)
         risk_per_share = entry_price - stop_loss
-        max_risk_amount = allocated_capital * MAX_RISK_PER_TRADE
-        max_shares_by_risk = max_risk_amount / risk_per_share if risk_per_share > 0 else 0
-
-        # Base position size
-        base_position_size = min(max_position, max_shares_by_risk * entry_price)
-
-        # Quality-based multiplier (0.5x to 2.0x based on score)
-        # STRATEGY-AWARE FIX: Use correct min score for swing vs positional
-        if strategy_type == 'swing':
-            min_score = MIN_SWING_SIGNAL_SCORE  # 5.5 for swing
-        else:  # positional
-            min_score = MIN_SIGNAL_SCORE  # 7.0 for positional
-        
-        if score >= min_score:
-            quality_multiplier = 0.5 + (score - min_score) * 0.5
-            quality_multiplier = min(quality_multiplier, 2.0)
+        if risk_per_share <= 0:
+            # Invalid stop loss (shouldn't happen, but safety check)
+            position_size = 0
         else:
-            quality_multiplier = 0.5
-
-        # Final position size
-        position_size = base_position_size * quality_multiplier
+            # Simple equal distribution - same position size for all trades
+            position_size = max_position  # ₹8.6K per trade (equal allocation)
 
         # Calculate number of shares
         shares = int(position_size / entry_price) if entry_price > 0 else 0
@@ -931,6 +1056,102 @@ class SequentialScanner:
         }
 
         return signal
+
+    def _print_detailed_rankings(self, mr_signals: List[Dict], momentum_signals: List[Dict], positional_signals: List[Dict]):
+        """
+        Print detailed strategy-specific rankings
+
+        Shows:
+        1. Top 5 Mean Reversion signals (from ALL MR candidates, not just selected)
+        2. Top 5 Momentum signals (from ALL momentum candidates, not just selected)
+        3. Overall Top 10 combined (from final selected positional_signals)
+
+        Args:
+            mr_signals: ALL mean reversion candidates (already sorted by score)
+            momentum_signals: ALL momentum candidates (already sorted by score)
+            positional_signals: Final selected signals (top 1 MR + top 5 momentum)
+        """
+        if not positional_signals:
+            return
+
+        # mr_signals and momentum_signals are already sorted by caller (line 392-393)
+
+        print("\n" + "="*80)
+        print("📊 DETAILED STRATEGY RANKINGS")
+        print("="*80)
+
+        # Top 5 Mean Reversion
+        print(f"\n🔄 TOP 5 MEAN REVERSION SIGNALS:")
+        print("-" * 80)
+        if mr_signals:
+            for i, sig in enumerate(mr_signals[:5], 1):
+                symbol = sig['symbol']
+                score = sig.get('score', 0)
+                mr_score = sig.get('mean_reversion_score', 0)
+                # Normalize MR score to /100 (max raw score is ~209)
+                normalized_mr_score = min(100, (mr_score / 209) * 100)
+                rsi = sig.get('indicators', {}).get('rsi', 0)
+                adx = sig.get('indicators', {}).get('adx', 0)
+                price = sig.get('entry_price', 0)
+                target2 = sig.get('target2', 0)
+                potential = ((target2 - price) / price * 100) if price > 0 else 0
+
+                print(f"{i}. {symbol:15} | Score: {score:.1f}/10 | Quality: {normalized_mr_score:3.0f}/100 | "
+                      f"RSI: {rsi:4.1f} | ADX: {adx:4.1f} | Potential: {potential:+.1f}%")
+        else:
+            print("   No mean reversion signals found")
+
+        # Top 5 Momentum
+        print(f"\n⚡ TOP 5 MOMENTUM SIGNALS:")
+        print("-" * 80)
+        if momentum_signals:
+            for i, sig in enumerate(momentum_signals[:5], 1):
+                symbol = sig['symbol']
+                score = sig.get('score', 0)
+                mom_score = sig.get('momentum_score', 0)
+                # Normalize Momentum score to /100 (max raw score is ~212)
+                normalized_mom_score = min(100, (mom_score / 212) * 100)
+                rsi = sig.get('indicators', {}).get('rsi', 0)
+                adx = sig.get('indicators', {}).get('adx', 0)
+                price = sig.get('entry_price', 0)
+                target2 = sig.get('target2', 0)
+                potential = ((target2 - price) / price * 100) if price > 0 else 0
+
+                print(f"{i}. {symbol:15} | Score: {score:.1f}/10 | Quality: {normalized_mom_score:3.0f}/100 | "
+                      f"RSI: {rsi:4.1f} | ADX: {adx:4.1f} | Potential: {potential:+.1f}%")
+        else:
+            print("   No momentum signals found")
+
+        # Overall Top 10 (combined, sorted by score)
+        print(f"\n🏆 OVERALL TOP 10 (ALL STRATEGIES COMBINED):")
+        print("-" * 80)
+        all_signals = positional_signals[:10]
+        for i, sig in enumerate(all_signals, 1):
+            symbol = sig['symbol']
+            signal_type = sig.get('signal_type', 'UNKNOWN')
+            score = sig.get('score', 0)
+            quality = sig.get('mean_reversion_score', 0) if signal_type == 'MEAN_REVERSION' else sig.get('momentum_score', 0)
+            # Normalize quality score to /100
+            if signal_type == 'MEAN_REVERSION':
+                normalized_quality = min(100, (quality / 209) * 100)
+            else:  # MOMENTUM
+                normalized_quality = min(100, (quality / 212) * 100)
+            rsi = sig.get('indicators', {}).get('rsi', 0)
+            adx = sig.get('indicators', {}).get('adx', 0)
+            price = sig.get('entry_price', 0)
+            target2 = sig.get('target2', 0)
+            potential = ((target2 - price) / price * 100) if price > 0 else 0
+
+            type_emoji = '🔄' if signal_type == 'MEAN_REVERSION' else '⚡'
+            type_label = 'MR' if signal_type == 'MEAN_REVERSION' else 'MOM'
+
+            print(f"{i:2}. {type_emoji} {symbol:15} [{type_label:3}] | Score: {score:.1f}/10 | Q: {normalized_quality:3.0f}/100 | "
+                  f"RSI: {rsi:4.1f} | ADX: {adx:4.1f} | Target: {potential:+.1f}%")
+
+        print("\n" + "="*80)
+        print(f"📌 Summary: {len(mr_signals)} MR + {len(momentum_signals)} Momentum = {len(positional_signals)} Total")
+        print(f"🎯 Smart Allocation: Will select 3 MR + 4 Momentum = 7 positions")
+        print("="*80)
 
 
 def test_sequential_scanner():

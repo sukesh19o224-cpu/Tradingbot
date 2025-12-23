@@ -56,6 +56,7 @@ class TechnicalIndicators:
             df = self._calculate_rsi(df)
             df = self._calculate_macd(df)
             df = self._calculate_bollinger_bands(df)
+            df = self._calculate_stochastic(df)  # Add Stochastic for mean reversion
             df = self._calculate_adx(df)
             df = self._calculate_volume_indicators(df)
             df = self._calculate_momentum(df)
@@ -70,6 +71,7 @@ class TechnicalIndicators:
             return {
                 'price': latest['Close'],
                 'ema_8': latest.get('EMA_8', 0),
+                'ema_20': latest.get('EMA_20', 0),  # Add EMA_20 for mean reversion
                 'ema_21': latest.get('EMA_21', 0),
                 'ema_50': latest.get('EMA_50', 0),
                 'ema_200': latest.get('EMA_200', 0),
@@ -81,11 +83,14 @@ class TechnicalIndicators:
                 'bb_middle': latest.get('BB_Middle', 0),
                 'bb_lower': latest.get('BB_Lower', 0),
                 'bb_position': latest.get('BB_Position', 0.5),
+                'stoch_k': latest.get('Stoch_K', 50),  # Stochastic %K
+                'stoch_d': latest.get('Stoch_D', 50),  # Stochastic %D
                 'adx': latest.get('ADX', 0),
                 'plus_di': latest.get('+DI', 0),
                 'minus_di': latest.get('-DI', 0),
                 'atr': latest.get('ATR', 0),  # Include ATR for stop loss calculation
                 'volume_ratio': latest.get('Volume_Ratio', 1.0),
+                'momentum_1d': latest.get('Momentum_1D', 0),  # Add 1-day momentum
                 'momentum_5d': latest.get('Momentum_5D', 0),
                 'momentum_20d': latest.get('Momentum_20D', 0),
                 'signals': signals,
@@ -133,6 +138,35 @@ class TechnicalIndicators:
         # Calculate position within bands (0 = lower, 0.5 = middle, 1 = upper)
         df['BB_Position'] = (df['Close'] - df['BB_Lower']) / (df['BB_Upper'] - df['BB_Lower'])
         df['BB_Position'] = df['BB_Position'].clip(0, 1)
+
+        return df
+
+    def _calculate_stochastic(self, df: pd.DataFrame, k_period: int = 14, d_period: int = 3) -> pd.DataFrame:
+        """
+        Calculate Stochastic Oscillator (%K and %D)
+        OPTIMIZED FOR MEAN REVERSION: Detects oversold conditions and reversals
+
+        %K = Fast line (current position in high-low range)
+        %D = Slow line (moving average of %K)
+
+        Signals:
+        - %K < 20 = Oversold (potential bounce)
+        - %K > 80 = Overbought
+        - %K crosses above %D = Bullish reversal
+        """
+        # Get high/low for the period
+        low_min = df['Low'].rolling(window=k_period).min()
+        high_max = df['High'].rolling(window=k_period).max()
+
+        # Calculate %K (fast stochastic)
+        df['Stoch_K'] = 100 * ((df['Close'] - low_min) / (high_max - low_min))
+
+        # Calculate %D (slow stochastic - moving average of %K)
+        df['Stoch_D'] = df['Stoch_K'].rolling(window=d_period).mean()
+
+        # Fill NaN with neutral value
+        df['Stoch_K'] = df['Stoch_K'].fillna(50)
+        df['Stoch_D'] = df['Stoch_D'].fillna(50)
 
         return df
 

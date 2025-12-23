@@ -74,10 +74,33 @@ class DataCache:
             if 'data' not in cached or 'last_update' not in cached:
                 return None
 
-            # Check if cache is too old (> 7 days for daily, > 1 day for intraday)
-            max_age = timedelta(days=7) if interval == '1d' else timedelta(days=1)
-            if datetime.now() - cached['last_update'] > max_age:
+            # Check if cache is too old (> 1 day for daily, > 4 hours for intraday)
+            # REDUCED from 7 days to 1 day to ensure fresh data
+            max_age = timedelta(days=1) if interval == '1d' else timedelta(hours=4)
+            cache_age = datetime.now() - cached['last_update']
+            if cache_age > max_age:
+                # Cache too old - invalidate it
                 return None
+
+            # Also check if data itself is stale (latest date is > 2 days old for daily)
+            data = cached.get('data')
+            if data is not None and len(data) > 0:
+                latest_date = data.index[-1]
+                # Convert to timezone-naive for comparison
+                if hasattr(latest_date, 'tz') and latest_date.tz is not None:
+                    latest_date = latest_date.tz_localize(None)
+                
+                # Get today's date (timezone-naive)
+                today = datetime.now().date()
+                if hasattr(latest_date, 'date'):
+                    data_date = latest_date.date()
+                else:
+                    data_date = latest_date
+                
+                days_old = (today - data_date).days
+                # If daily data is > 2 days old, invalidate cache (force fresh fetch)
+                if interval == '1d' and days_old > 2:
+                    return None
 
             return cached
 
@@ -103,36 +126,46 @@ class DataCache:
         except Exception as e:
             print(f"⚠️ Error saving cache for {symbol}: {e}")
 
-    def get_data(self, symbol: str, period: str = '60d', interval: str = '1d') -> Optional[pd.DataFrame]:
+    def get_data(self, symbol: str, period: str = '60d', interval: str = '1d', force_fresh: bool = False) -> Optional[pd.DataFrame]:
         """
         Get data for a symbol (from cache or download)
 
         Smart fetching:
-        1. Check cache
+        1. Check cache (unless force_fresh=True)
         2. If cached and recent: Only fetch new candles
         3. If not cached: Download full history
-        4. Update cache
+        4. Update cache with fresh data
 
         Args:
             symbol: Stock symbol (e.g., 'RELIANCE.NS')
             period: Period for initial download (e.g., '60d')
             interval: Candle interval ('1d', '15m', '5m')
+            force_fresh: If True, skip cache and fetch fresh data
 
         Returns:
             DataFrame with OHLCV data, or None if failed
         """
+        # Force fresh fetch if requested (for critical operations)
+        if force_fresh:
+            full_data = self._fetch_new_data(symbol, period, interval)
+            if full_data is not None and len(full_data) > 0:
+                self._save_to_cache(symbol, interval, full_data)
+                return full_data
+            return None
+        
         # Try to load from cache
         cached = self._load_from_cache(symbol, interval)
 
         if cached is not None:
-            # Cache hit! Only fetch new candles
+            # Cache hit! Always try to fetch fresh data to ensure up-to-date
             cached_data = cached['data']
             last_update = cached['last_update']
 
+            # ALWAYS fetch fresh data (even if cache exists) to ensure latest prices
             # Calculate how many new candles we need
             if interval == '1d':
-                # For daily data, fetch last 5 days (to ensure we have latest)
-                new_data = self._fetch_new_data(symbol, '5d', interval)
+                # For daily data, fetch last 7 days (to ensure we have latest, including weekends)
+                new_data = self._fetch_new_data(symbol, '7d', interval)
             else:
                 # For intraday, fetch last 2 days
                 new_data = self._fetch_new_data(symbol, '2d', interval)
@@ -141,26 +174,53 @@ class DataCache:
                 # Merge cached + new data
                 combined = pd.concat([cached_data, new_data])
 
-                # Remove duplicates (keep latest)
+                # Remove duplicates (keep latest - this ensures fresh data overwrites old)
                 combined = combined[~combined.index.duplicated(keep='last')]
 
                 # Sort by date
                 combined = combined.sort_index()
 
                 # Trim to keep only recent data (60 days for daily, 7 days for intraday)
+                # FIX TIMEZONE BUG: Make cutoff timezone-aware if DataFrame index is timezone-aware
                 if interval == '1d':
-                    cutoff = datetime.now() - timedelta(days=60)
+                    cutoff_days = 60
                 else:
-                    cutoff = datetime.now() - timedelta(days=7)
+                    cutoff_days = 7
+                
+                cutoff = datetime.now() - timedelta(days=cutoff_days)
+                
+                # Check if DataFrame index is timezone-aware
+                if len(combined) > 0 and hasattr(combined.index[0], 'tz') and combined.index[0].tz is not None:
+                    # Make cutoff timezone-aware (use same timezone as DataFrame)
+                    import pytz
+                    tz = combined.index[0].tz
+                    cutoff = pytz.UTC.localize(cutoff) if tz is None else cutoff.replace(tzinfo=tz)
+                
+                # Filter data >= cutoff
+                try:
+                    combined = combined[combined.index >= cutoff]
+                except TypeError:
+                    # If timezone comparison fails, convert DataFrame index to timezone-naive
+                    combined.index = combined.index.tz_localize(None) if hasattr(combined.index[0], 'tz') and combined.index[0].tz is not None else combined.index
+                    cutoff_naive = cutoff.replace(tzinfo=None) if hasattr(cutoff, 'tzinfo') and cutoff.tzinfo is not None else cutoff
+                    combined = combined[combined.index >= cutoff_naive]
 
-                combined = combined[combined.index >= cutoff]
-
-                # Update cache
+                # Update cache with fresh data
                 self._save_to_cache(symbol, interval, combined)
 
                 return combined
             else:
-                # Couldn't fetch new data, return cached
+                # Couldn't fetch new data - check if cached data is recent enough
+                # If cache is > 1 day old, try full fetch
+                cache_age = datetime.now() - last_update
+                if cache_age > timedelta(days=1):
+                    # Cache too old and couldn't update - try full fetch
+                    full_data = self._fetch_new_data(symbol, period, interval)
+                    if full_data is not None and len(full_data) > 0:
+                        self._save_to_cache(symbol, interval, full_data)
+                        return full_data
+                
+                # Return cached data as fallback
                 return cached_data
 
         else:
@@ -175,22 +235,38 @@ class DataCache:
             return None
 
     def _fetch_new_data(self, symbol: str, period: str, interval: str) -> Optional[pd.DataFrame]:
-        """Fetch data from Yahoo Finance"""
-        try:
-            ticker = yf.Ticker(symbol)
-            df = ticker.history(period=period, interval=interval)
+        """Fetch data from Yahoo Finance with retry logic"""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                ticker = yf.Ticker(symbol)
+                df = ticker.history(period=period, interval=interval)
 
-            if df is None or len(df) == 0:
+                if df is None or len(df) == 0:
+                    if attempt < max_retries - 1:
+                        continue  # Retry
+                    return None
+
+                # Standardize column names (lowercase)
+                df.columns = df.columns.str.lower()
+                
+                # Ensure index is timezone-aware (consistent with yfinance)
+                # This prevents timezone comparison issues later
+                if len(df) > 0 and df.index.tz is None:
+                    # yfinance returns timezone-aware data, but if not, make it naive for consistency
+                    pass  # Keep as-is
+
+                return df
+
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(0.2 * (attempt + 1))  # Exponential backoff
+                    continue
+                # Fail silently for individual stocks on final attempt
                 return None
-
-            # Standardize column names (lowercase)
-            df.columns = df.columns.str.lower()
-
-            return df
-
-        except Exception as e:
-            # Fail silently for individual stocks
-            return None
+        
+        return None
 
     def clear_cache(self, symbol: Optional[str] = None):
         """

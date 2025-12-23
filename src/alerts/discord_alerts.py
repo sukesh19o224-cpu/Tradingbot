@@ -46,6 +46,16 @@ class DiscordAlerts:
         if not self.enabled:
             return
 
+        # Check strategy-specific Discord settings
+        from config.settings import DISCORD_SWING_ALERTS_ENABLED, DISCORD_POSITIONAL_ALERTS_ENABLED
+        strategy = signal.get('strategy', 'positional')
+
+        # Skip alert if disabled for this strategy
+        if strategy == 'swing' and not DISCORD_SWING_ALERTS_ENABLED:
+            return  # Swing alerts disabled
+        if strategy == 'positional' and not DISCORD_POSITIONAL_ALERTS_ENABLED:
+            return  # Positional alerts disabled
+
         try:
             symbol = signal['symbol']
             entry_price = signal['entry_price']
@@ -378,6 +388,25 @@ class DiscordAlerts:
         if not self.enabled:
             return
 
+        # Check strategy-specific Discord settings
+        from config.settings import DISCORD_SWING_ALERTS_ENABLED, DISCORD_POSITIONAL_ALERTS_ENABLED
+
+        # Determine strategy if not provided
+        if not strategy:
+            trade_type = exit_info.get('trade_type', '')
+            if 'SWING' in trade_type:
+                strategy = 'swing'
+            elif 'POSITIONAL' in trade_type:
+                strategy = 'positional'
+            else:
+                strategy = exit_info.get('strategy', 'positional')
+
+        # Skip alert if disabled for this strategy
+        if strategy == 'swing' and not DISCORD_SWING_ALERTS_ENABLED:
+            return  # Swing alerts disabled
+        if strategy == 'positional' and not DISCORD_POSITIONAL_ALERTS_ENABLED:
+            return  # Positional alerts disabled
+
         try:
             symbol = exit_info['symbol']
             exit_price = exit_info['exit_price']
@@ -544,15 +573,25 @@ class DiscordAlerts:
     def send_trailing_stop_alert(self, position_info: Dict, paper_trade: bool = False):
         """
         Send alert when trailing stop is activated (breakeven or ATR trailing)
-        
+
         Args:
-            position_info: Position information dict with symbol, current_price, entry_price, 
+            position_info: Position information dict with symbol, current_price, entry_price,
                          stop_loss, initial_stop_loss, profit_pct, breakeven_active, trailing_active, atr
             paper_trade: Whether this is a paper trade
         """
         if not self.enabled:
             return
-        
+
+        # Check strategy-specific Discord settings
+        from config.settings import DISCORD_SWING_ALERTS_ENABLED, DISCORD_POSITIONAL_ALERTS_ENABLED
+        strategy = position_info.get('strategy', 'positional')
+
+        # Skip alert if disabled for this strategy
+        if strategy == 'swing' and not DISCORD_SWING_ALERTS_ENABLED:
+            return  # Swing alerts disabled
+        if strategy == 'positional' and not DISCORD_POSITIONAL_ALERTS_ENABLED:
+            return  # Positional alerts disabled
+
         try:
             symbol = position_info['symbol']
             current_price = position_info['current_price']
