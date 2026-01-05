@@ -1,6 +1,6 @@
 {
-  "capital": 0,
-  "initial_capital": 0,
+  "capital": 130000,
+  "initial_capital": 130000,
   "positions": {},
   "performance": {
     "total_trades": 0,
@@ -10,5 +10,5 @@
     "best_trade": 0,
     "worst_trade": 0
   },
-  "start_date": "2026-01-03T22:05:24.092028"
+  "start_date": "2026-01-03T22:03:47.709708"
 }

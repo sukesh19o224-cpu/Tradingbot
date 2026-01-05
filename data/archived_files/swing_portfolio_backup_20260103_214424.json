@@ -1,6 +1,5 @@
 {
-  "capital": 0,
-  "initial_capital": 0,
+  "capital": 65000,
   "positions": {},
   "performance": {
     "total_trades": 0,
@@ -10,5 +9,8 @@
     "best_trade": 0,
     "worst_trade": 0
   },
-  "start_date": "2026-01-03T22:05:24.092028"
+  "start_date": "2026-01-03T21:36:48.196759",
+  "last_updated": "2026-01-03T21:36:48.196760",
+  "initial_capital": 65000,
+  "mode": "PAPER_TRADING"
 }

@@ -66,66 +66,50 @@ class PositionSizer:
         base_risk: float = MAX_RISK_PER_TRADE
     ) -> float:
         """
-        Calculate position size based on ACTUAL stop loss distance
-        
-        CRITICAL FIX: Uses actual stop loss from signal (which is already ATR-adjusted)
-        instead of fixed ATR multiplier. This ensures risk normalization:
-        - Stock with 2% stop → Larger position (same risk)
-        - Stock with 6% stop → Smaller position (same risk)
-        - Result: Same ₹ risk per trade regardless of stop distance
+        Calculate EQUAL position size for all trades
+
+        EQUAL SIZING: Each position gets the same capital allocation (16.7% of portfolio)
+        This ensures consistent position sizing regardless of stop loss distance.
+
+        For ₹50,000 portfolio with 6 max positions:
+        - Each position = ₹50,000 × 16.7% = ₹8,350
+
+        Stop loss is still ATR-adjusted for proper risk management,
+        but position SIZE is equal for all trades.
 
         Args:
             portfolio_value: Total portfolio value
-            signal: Trading signal with entry/stop (stop is already ATR-adjusted)
-            df: Historical OHLCV data (used for validation, not calculation)
-            base_risk: Base risk per trade (default from settings)
+            signal: Trading signal with entry/stop
+            df: Historical OHLCV data (not used for equal sizing)
+            base_risk: Base risk per trade (not used for equal sizing)
 
         Returns:
-            Position size in rupees
+            Position size in rupees (equal for all positions)
         """
         try:
             entry_price = signal['entry_price']
             stop_loss = signal['stop_loss']
 
-            # CRITICAL: Use ACTUAL stop loss distance, not fixed ATR multiplier
-            # The stop_loss in signal is already ATR-adjusted (2-6% range)
-            # This ensures perfect risk normalization
+            # Validate stop loss
             risk_per_share = entry_price - stop_loss
-
             if risk_per_share <= 0:
                 # Invalid stop loss (above entry price)
-                print(f"   ⚠️  Invalid stop loss: Entry={entry_price:.2f}, Stop={stop_loss:.2f}, Risk={risk_per_share:.2f}")
+                print(f"   ⚠️  Invalid stop loss: Entry={entry_price:.2f}, Stop={stop_loss:.2f}")
                 return 0
 
-            # Risk amount (in rupees) - this is what we want to risk per trade
-            risk_amount = portfolio_value * base_risk
+            # EQUAL SIZING: Use MAX_POSITION_SIZE for all positions
+            # MAX_POSITION_SIZE = 16.7% (for 6 positions in ₹50K portfolio)
+            position_value = portfolio_value * MAX_POSITION_SIZE
 
-            # Calculate shares to buy: risk_amount / risk_per_share
-            # This ensures we risk exactly risk_amount regardless of stop distance
-            shares = risk_amount / risk_per_share
-
-            # Position value
-            position_value = shares * entry_price
-
-            # Cap at max position size (20% of portfolio)
-            max_position = portfolio_value * MAX_POSITION_SIZE
-            
-            if position_value > max_position:
-                # Position exceeds max, cap it
-                position_value = max_position
-                # Recalculate shares with capped position
-                shares = int(position_value / entry_price)
-                if shares == 0:
-                    return 0
-                # Actual risk will be less than target, but that's okay
-                # (Better to have smaller position than exceed limits)
+            # That's it! Every position gets the same capital allocation
+            # No complex risk calculations - just equal distribution
 
             return position_value
 
         except Exception as e:
-            print(f"⚠️ Volatility sizing error: {e}")
-            # Fallback to simple stop-loss based sizing
-            return self._fallback_sizing(portfolio_value, entry_price, stop_loss, base_risk)
+            print(f"⚠️ Position sizing error: {e}")
+            # Fallback to equal sizing
+            return portfolio_value * MAX_POSITION_SIZE
 
     def _fallback_sizing(
         self,
@@ -134,18 +118,9 @@ class PositionSizer:
         stop: float,
         base_risk: float
     ) -> float:
-        """Fallback to simple stop-loss based sizing"""
-        risk_amount = portfolio_value * base_risk
-        risk_per_share = entry - stop
-
-        if risk_per_share <= 0:
-            return 0
-
-        shares = risk_amount / risk_per_share
-        position_value = shares * entry
-
-        max_position = portfolio_value * MAX_POSITION_SIZE
-        return min(position_value, max_position)
+        """Fallback to equal sizing"""
+        # EQUAL SIZING: Just return MAX_POSITION_SIZE
+        return portfolio_value * MAX_POSITION_SIZE
 
     def adjust_for_drawdown(
         self,
@@ -215,9 +190,9 @@ class PositionSizer:
             min_score = MIN_SIGNAL_SCORE  # 7.0 for positional
             if signal_score < min_score:
                 return 0  # Skip below positional threshold
-            # FIXED: For positional: 0.75x at 7, 0.85x at 8, 0.95x at 9, 1.0x at 10
-            # Removed aggressive 2x multiplier - position sizing should be conservative
-            quality_multiplier = 0.75 + (signal_score - 7) * 0.083  # Linear from 0.75 to 1.0
+            # EQUAL POSITION SIZING: All qualifying signals get same position size
+            # This ensures consistent ₹8,500 per trade for better capital allocation
+            quality_multiplier = 1.0  # Always 100% for positional trades
 
         quality_multiplier = min(quality_multiplier, 1.0)  # FIXED: Cap at 1x (no oversizing)
         base_adjusted = position_size * quality_multiplier

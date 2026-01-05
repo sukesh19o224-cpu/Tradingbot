@@ -974,8 +974,11 @@ class PaperTrader:
         """
         try:
             # Calculate portfolio value and current drawdown
-            portfolio_value = self.capital + sum(p['shares'] * p['entry_price'] for p in self.positions.values())
-            current_drawdown = max(0, (self.initial_capital - portfolio_value) / self.initial_capital)
+            # Use TOTAL CAPITAL (initial + all profits) for equal position sizing
+            # This ensures each new position gets 16.7% of the GROWING capital, not just initial ₹50K
+            total_capital = self.initial_capital + self.performance['total_pnl']
+            portfolio_value = total_capital
+            current_drawdown = max(0, (self.initial_capital - total_capital) / self.initial_capital)
 
             # Get historical data for ATR calculation
             df = None

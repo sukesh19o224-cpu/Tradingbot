@@ -14,11 +14,11 @@ load_dotenv()
 # ═══════════════════════════════════════════════════════════════
 
 # POSITIONAL Portfolio (REAL MONEY - Primary Strategy)
-INITIAL_CAPITAL = 50000  # Positional capital (₹50,000) - REAL MONEY
-PAPER_TRADING_CAPITAL = 50000  # Positional paper trading
+INITIAL_CAPITAL = 130000  # Positional capital (₹1,30,000) - REAL MONEY - 100% allocation
+PAPER_TRADING_CAPITAL = 130000  # Positional paper trading
 
-# SWING/INTRADAY Portfolio (PAPER TRADING - Testing Phase)
-SWING_CAPITAL = 50000  # 🎯 1% SCALPING SYSTEM - Intraday capital (₹50,000) - PAPER ONLY
+# SWING/INTRADAY Portfolio (DISABLED - Not using swing strategy)
+SWING_CAPITAL = 0  # Swing trading disabled - 0% allocation
 # NOTE: Swing = 1% SCALPER (SAME DAY ONLY) - Exits at 1% profit OR 3:15 PM (NO overnight holds)
 # Strategy: Quick 1% gains, tight 0.5% stops, high-frequency momentum trades
 # Once proven profitable in paper trading, can deploy with real money
@@ -38,9 +38,9 @@ DRAWDOWN_THRESHOLD_MINOR = 0.05  # At 5% drawdown, reduce to 75% size
 DRAWDOWN_THRESHOLD_MAJOR = 0.10  # At 10% drawdown, reduce to 50% size
 
 # Position Limits (Per Portfolio)
-MAX_POSITIONS = 6  # Positional: 6 positions max (6 × ₹8.5K = ₹51K, equal distribution)
-MAX_POSITIONS_SWING = 10  # Swing: 10 positions max (high-frequency rotation - more opportunities for quick 1-2% profits)
-MAX_POSITION_SIZE = 0.167  # 16.7% per position (equal distribution: ₹51K ÷ 6 = ₹8.5K each)
+MAX_POSITIONS = 6  # Positional: 6 positions max (6 × ₹21.7K = ₹130K, equal distribution)
+MAX_POSITIONS_SWING = 0  # Swing: DISABLED (not using swing strategy)
+MAX_POSITION_SIZE = 0.167  # 16.7% per position (equal distribution: ₹130K ÷ 6 = ₹21.7K each)
 MAX_SECTOR_EXPOSURE = 0.40  # 40% max per sector
 
 # Market Circuit Breaker (Exit all positions if market crashes)

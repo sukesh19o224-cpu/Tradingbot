@@ -15,8 +15,8 @@ from config.settings import INITIAL_CAPITAL, SWING_CAPITAL, MAX_POSITIONS, MAX_P
 class DualPortfolio:
     """
     Manages two separate portfolios:
-    - Positional Trading Portfolio (₹50K) - Real money, balanced strategies
-    - Swing Trading Portfolio (₹25K) - Paper test, A+ only
+    - Positional Trading Portfolio (₹65K) - Real money, balanced strategies
+    - Swing Trading Portfolio (₹65K) - Paper test, A+ only
     """
 
     def __init__(self, positional_capital: float = INITIAL_CAPITAL, swing_capital: float = SWING_CAPITAL):
@@ -24,8 +24,8 @@ class DualPortfolio:
         Initialize dual portfolio system
 
         Args:
-            positional_capital: Capital for positional portfolio (default: ₹50,000)
-            swing_capital: Capital for swing portfolio (default: ₹25,000)
+            positional_capital: Capital for positional portfolio (default: ₹65,000)
+            swing_capital: Capital for swing portfolio (default: ₹65,000)
         """
         # Use FIXED allocations from settings (not percentages)
         # This allows independent scaling of each portfolio
@@ -46,9 +46,9 @@ class DualPortfolio:
         self.total_initial_capital = positional_capital + swing_capital
 
         print(f"💼 INTERMEDIATE Positional Strategy - Dual Portfolio Initialized:")
-        print(f"   📈 Positional Portfolio (MAIN): ₹{positional_capital:,.0f} (70%) - 5-14 days, targets 5/10/15%")
-        print(f"   🔥 Swing Portfolio (STRICT): ₹{swing_capital:,.0f} (30%) - Score ≥8.0, ADX ≥30")
-        print(f"   💰 Total Capital: ₹{self.total_initial_capital:,.0f} • Max {MAX_POSITIONS}/{MAX_POSITIONS_SWING} positions")
+        print(f"   📈 Positional Portfolio (MAIN): ₹{positional_capital:,.0f} (100%) - 5-14 days, targets 5/10/15%")
+        print(f"   🔥 Swing Portfolio (DISABLED): ₹{swing_capital:,.0f} (0%) - Not using swing strategy")
+        print(f"   💰 Total Capital: ₹{self.total_initial_capital:,.0f} • Max {MAX_POSITIONS} positions")
 
     def execute_swing_signal(self, signal: Dict) -> bool:
         """
@@ -193,7 +193,7 @@ class DualPortfolio:
         if allocation['momentum_slots_available'] > 0 and momentum_signals:
             slots_to_fill = allocation['momentum_slots_available']
             print(f"\n🎯 Filling {slots_to_fill} MOMENTUM slots...")
-            for signal in momentum_signals[:slots_to_fill]:
+            for signal in momentum_signals:
                 symbol = signal['symbol']
                 print(f"\n   Attempting to execute {symbol} (MOMENTUM)...")
                 if self.execute_positional_signal(signal):
