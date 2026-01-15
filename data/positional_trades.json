@@ -54,5 +54,41 @@
     "trade_type": "📈 POSITIONAL TRADE",
     "signal_type": "MOMENTUM",
     "strategy": "positional"
+  },
+  {
+    "symbol": "THELEELA.NS",
+    "entry_price": 440.0,
+    "exit_price": 448.5,
+    "shares": 49,
+    "entry_date": "2026-01-15T09:45:08",
+    "exit_date": "2026-01-15T13:16:11",
+    "pnl": 416.5,
+    "pnl_percent": 1.93,
+    "reason": "MANUAL_SELL",
+    "trade_type": "📈 POSITIONAL TRADE",
+    "signal_type": "MOMENTUM",
+    "strategy": "positional",
+    "holding_days": 0,
+    "holding_hours": 3.5,
+    "cost": 21560.0,
+    "proceeds": 21976.5
+  },
+  {
+    "symbol": "MCX.NS",
+    "entry_price": 2322.0,
+    "exit_price": 2369.0,
+    "shares": 9,
+    "entry_date": "2026-01-15T09:44:41",
+    "exit_date": "2026-01-15T10:45:55",
+    "pnl": 423.0,
+    "pnl_percent": 2.02,
+    "reason": "MANUAL_SELL",
+    "trade_type": "📈 POSITIONAL TRADE",
+    "signal_type": "MOMENTUM",
+    "strategy": "positional",
+    "holding_days": 0,
+    "holding_hours": 1.0,
+    "cost": 20898.0,
+    "proceeds": 21321.0
   }
 ]

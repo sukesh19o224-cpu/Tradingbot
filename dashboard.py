@@ -1,6 +1,6 @@
 """
 📊 LIVE PORTFOLIO DASHBOARD
-Real-time view of your dual portfolio (Swing + Positional)
+Real-time view of your portfolios (Swing + Positional + ETF)
 
 Auto-refreshes every 5 seconds
 """
@@ -93,11 +93,27 @@ def load_portfolio_data():
             with open(positional_trades_file, 'r') as f:
                 positional_trades = json.load(f)
 
+        # Load ETF portfolio
+        etf_data = {}
+        etf_file = 'data/etf_portfolio.json'
+        if os.path.exists(etf_file):
+            with open(etf_file, 'r') as f:
+                etf_data = json.load(f)
+
+        # Load ETF trades
+        etf_trades = []
+        etf_trades_file = 'data/etf_trades.json'
+        if os.path.exists(etf_trades_file):
+            with open(etf_trades_file, 'r') as f:
+                etf_trades = json.load(f)
+
         return {
             'swing': swing_data,
             'positional': positional_data,
             'swing_trades': swing_trades,
-            'positional_trades': positional_trades
+            'positional_trades': positional_trades,
+            'etf': etf_data,
+            'etf_trades': etf_trades
         }
     except Exception as e:
         st.error(f"Error loading data: {e}")
@@ -111,24 +127,29 @@ def display_portfolio_summary(data, current_prices):
 
     swing = data.get('swing', {})
     positional = data.get('positional', {})
+    etf = data.get('etf', {})
 
     # Get initial capital from saved data
-    swing_initial = swing.get('initial_capital', 15000)
-    positional_initial = positional.get('initial_capital', 35000)
-    total_initial = swing_initial + positional_initial
+    swing_initial = swing.get('initial_capital', 0)
+    positional_initial = positional.get('initial_capital', 130000)
+    etf_initial = etf.get('initial_capital', 130000)
+    total_initial = positional_initial  # Use positional as main capital
 
     # Get current cash
-    swing_capital = swing.get('capital', 15000)
-    positional_capital = positional.get('capital', 35000)
-    total_cash = swing_capital + positional_capital
+    swing_capital = swing.get('capital', 0)
+    positional_capital = positional.get('capital', 0)
+    etf_capital = etf.get('capital', 0)
+    total_cash = swing_capital + positional_capital + etf_capital
 
     swing_positions = swing.get('positions', {})
     positional_positions = positional.get('positions', {})
+    etf_positions = etf.get('positions', {})
 
     # Calculate invested amount and current value
     swing_invested = sum(pos.get('cost', 0) for pos in swing_positions.values())
     positional_invested = sum(pos.get('cost', 0) for pos in positional_positions.values())
-    total_invested = swing_invested + positional_invested
+    etf_invested = sum(pos.get('cost', 0) for pos in etf_positions.values())
+    total_invested = swing_invested + positional_invested + etf_invested
 
     # Calculate current value of positions
     swing_current_value = 0
@@ -147,7 +168,15 @@ def display_portfolio_summary(data, current_prices):
             current_price = pos.get('entry_price', 0)
         positional_current_value += pos.get('shares', 0) * current_price
 
-    total_current_value = swing_current_value + positional_current_value
+    etf_current_value = 0
+    for symbol, pos in etf_positions.items():
+        current_price = current_prices.get(symbol, 0)
+        # CRITICAL FIX: If price fetch failed (0 or negative), use entry price as fallback
+        if current_price <= 0:
+            current_price = pos.get('entry_price', 0)
+        etf_current_value += pos.get('shares', 0) * current_price
+
+    total_current_value = swing_current_value + positional_current_value + etf_current_value
 
     # Calculate total portfolio value (cash + positions)
     swing_portfolio_value = swing_capital + swing_current_value
@@ -388,14 +417,80 @@ def display_portfolio_summary(data, current_prices):
         st.metric("➖ Breakeven", positional_breakeven)
 
     st.markdown("---")
-    
+
+    # ========================================
+    # ETF PORTFOLIO SECTION
+    # ========================================
+    st.header("💎 ETF PORTFOLIO")
+
+    etf_portfolio_value = etf_capital + etf_current_value
+    etf_pnl = etf_portfolio_value - etf_initial
+    etf_pnl_pct = (etf_pnl / etf_initial * 100) if etf_initial > 0 else 0
+
+    # Get ETF trade stats
+    etf_trades_list = data.get('etf_trades', [])
+    etf_total_trades = len(etf_trades_list)
+    etf_wins = sum(1 for t in etf_trades_list if t.get('pnl', 0) > 0.01)
+    etf_losses = sum(1 for t in etf_trades_list if t.get('pnl', 0) < -0.01)
+    etf_win_loss_total = etf_wins + etf_losses
+    etf_win_rate = (etf_wins / etf_win_loss_total * 100) if etf_win_loss_total > 0 else 0
+
+    etf_realized_pnl = sum(t.get('pnl', 0) for t in etf_trades_list)
+    etf_unrealized_pnl = etf_current_value - etf_invested
+
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
+
+    with col1:
+        st.metric("💰 Initial", f"₹{etf_initial:,.0f}")
+
+    with col2:
+        st.metric("📊 Current Value", f"₹{etf_portfolio_value:,.0f}",
+                 delta=f"₹{etf_pnl:+,.0f}")
+
+    with col3:
+        pnl_color = "positive" if etf_pnl >= 0 else "negative"
+        st.markdown(f"**Total P&L**")
+        st.markdown(f"<span class='{pnl_color} big-metric'>{etf_pnl_pct:+.2f}%</span>",
+                   unsafe_allow_html=True)
+
+    with col4:
+        st.metric("💵 Cash", f"₹{etf_capital:,.0f}")
+        st.metric("📈 Invested", f"₹{etf_invested:,.0f}")
+
+    with col5:
+        st.metric("📊 Holdings", len(etf_positions))
+        realized_color = "positive" if etf_realized_pnl >= 0 else "negative"
+        st.markdown(f"**Realized P&L**")
+        st.markdown(f"<span class='{realized_color}'>₹{etf_realized_pnl:+,.0f}</span>",
+                   unsafe_allow_html=True)
+        unrealized_color = "positive" if etf_unrealized_pnl >= 0 else "negative"
+        st.markdown(f"**Unrealized P&L**")
+        st.markdown(f"<span class='{unrealized_color}'>₹{etf_unrealized_pnl:+,.0f}</span>",
+                   unsafe_allow_html=True)
+
+    with col6:
+        st.metric("📝 Total Trades", etf_total_trades)
+        st.metric("✅ Win Rate", f"{etf_win_rate:.1f}%")
+
+    # Trade Statistics Section
+    st.markdown("### 📊 Trade Statistics")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("✅ Wins", etf_wins)
+    with col2:
+        st.metric("❌ Losses", etf_losses)
+    with col3:
+        st.metric("⚖️ Win:Loss Ratio", f"{etf_wins}:{etf_losses}" if etf_losses > 0 else f"{etf_wins}:0")
+
+    st.markdown("---")
+
     # Combined Quick Summary
     st.subheader("📊 COMBINED SUMMARY")
-    total_positions = len(swing_positions) + len(positional_positions)
+    total_positions = len(swing_positions) + len(positional_positions) + len(etf_positions)
     total_pnl = total_portfolio_value - total_initial
     total_pnl_pct = (total_pnl / total_initial * 100) if total_initial > 0 else 0
-    total_realized_pnl = realized_pnl
-    total_unrealized_pnl = swing_unrealized_pnl + positional_unrealized_pnl
+    total_realized_pnl = realized_pnl + etf_realized_pnl
+    total_unrealized_pnl = swing_unrealized_pnl + positional_unrealized_pnl + etf_unrealized_pnl
     
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
@@ -426,14 +521,16 @@ def display_open_positions(data, current_prices):
 
     swing = data.get('swing', {})
     positional = data.get('positional', {})
+    etf = data.get('etf', {})
 
     swing_positions = swing.get('positions', {})
     positional_positions = positional.get('positions', {})
+    etf_positions = etf.get('positions', {})
 
     st.markdown("---")
     st.subheader("📊 OPEN POSITIONS")
 
-    if not swing_positions and not positional_positions:
+    if not swing_positions and not positional_positions and not etf_positions:
         st.info("No open positions. System is scanning for opportunities...")
         return
 
@@ -727,6 +824,59 @@ def display_open_positions(data, current_prices):
                         stop_loss_pct = ((entry_price - current_stop_loss) / entry_price * 100) if entry_price > 0 else 0
                         st.write(f"Stop Loss: ₹{current_stop_loss:.2f} ({stop_loss_pct:.2f}%)")
 
+    # ETF positions
+    if etf_positions:
+        st.markdown("### 💎 ETF Holdings")
+
+        for symbol, pos in etf_positions.items():
+            # Get current price with fallback if fetch failed
+            current_price = current_prices.get(symbol, 0)
+            entry_price = pos.get('entry_price', 0)
+            if current_price <= 0:
+                current_price = entry_price
+            shares = pos.get('shares', 0)
+
+            # Calculate P&L
+            invested = pos.get('cost', entry_price * shares)
+            current_value = current_price * shares
+            pnl = current_value - invested
+            pnl_pct = (pnl / invested * 100) if invested > 0 else 0
+            pnl_color = "positive" if pnl >= 0 else "negative"
+
+            # Calculate hold days
+            entry_date = pos.get('entry_date', '')
+            try:
+                entry_dt = datetime.fromisoformat(entry_date)
+                hold_days = (datetime.now() - entry_dt).days
+            except:
+                hold_days = 0
+
+            # Display ETF position
+            with st.expander(f"**{symbol}** | 💎 ETF | P&L: {pnl:+,.0f} ({pnl_pct:+.2f}%) | Current: ₹{current_price:.2f}"):
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    st.write("**Entry Info**")
+                    st.write(f"Type: 💎 ETF Investment")
+                    st.write(f"Entry Price: ₹{entry_price:.2f}")
+                    st.write(f"Entry Date: {entry_date[:10] if entry_date else 'N/A'}")
+                    st.write(f"Hold Days: {hold_days} days")
+
+                with col2:
+                    st.write("**Units**")
+                    st.write(f"Units: {shares}")
+                    st.write(f"Invested: ₹{invested:,.0f}")
+                    st.write(f"Current Value: ₹{current_value:,.0f}")
+
+                with col3:
+                    st.write("**Performance**")
+                    st.markdown(f"<span class='{pnl_color}'>P&L: ₹{pnl:+,.0f}</span>", unsafe_allow_html=True)
+                    st.markdown(f"<span class='{pnl_color}'>Return: {pnl_pct:+.2f}%</span>", unsafe_allow_html=True)
+                    peak_price = pos.get('peak_price', entry_price)
+                    lowest_price = pos.get('lowest_price', entry_price)
+                    st.write(f"Peak: ₹{peak_price:.2f}")
+                    st.write(f"Low: ₹{lowest_price:.2f}")
+
 def display_holding_pnl(data, current_prices):
     """Display Holding P&L - Unrealized gains/losses for open positions"""
     if not data:
@@ -734,14 +884,16 @@ def display_holding_pnl(data, current_prices):
 
     swing = data.get('swing', {})
     positional = data.get('positional', {})
+    etf = data.get('etf', {})
 
     swing_positions = swing.get('positions', {})
     positional_positions = positional.get('positions', {})
+    etf_positions = etf.get('positions', {})
 
     st.markdown("---")
     st.subheader("💰 HOLDING P&L (Unrealized)")
 
-    if not swing_positions and not positional_positions:
+    if not swing_positions and not positional_positions and not etf_positions:
         st.info("No open positions to show P&L.")
         return
 
@@ -791,6 +943,32 @@ def display_holding_pnl(data, current_prices):
         holding_data.append({
             'Symbol': symbol.replace('.NS', ''),
             'Type': '📈 Positional',
+            'Shares': shares,
+            'Entry': f"₹{entry_price:.2f}",
+            'Current': f"₹{current_price:.2f}",
+            'Invested': f"₹{invested:,.0f}",
+            'Current Value': f"₹{current_value:,.0f}",
+            'P&L': f"₹{pnl:+,.0f}",
+            'P&L %': f"{pnl_pct:+.2f}%",
+            '_pnl_raw': pnl,
+            '_pnl_pct_raw': pnl_pct
+        })
+
+    # Add ETF positions
+    for symbol, pos in etf_positions.items():
+        current_price = current_prices.get(symbol, 0)
+        entry_price = pos.get('entry_price', 0)
+        if current_price <= 0:
+            current_price = entry_price
+        shares = pos.get('shares', 0)
+        invested = pos.get('cost', entry_price * shares)
+        current_value = current_price * shares
+        pnl = current_value - invested
+        pnl_pct = (pnl / invested * 100) if invested > 0 else 0
+
+        holding_data.append({
+            'Symbol': symbol,
+            'Type': '💎 ETF',
             'Shares': shares,
             'Entry': f"₹{entry_price:.2f}",
             'Current': f"₹{current_price:.2f}",

@@ -1,0 +1,31 @@
+# 🚀 SUPER MATH TRADING SYSTEM - Requirements
+# Compatible with Python 3.8 - 3.14 (pandas-ta removed due to numba incompatibility)
+
+# Core Data & Math
+numpy
+pandas
+scipy
+
+# Market Data
+yfinance
+# pandas-ta  # Commented out - requires numba which doesn't support Python 3.14+
+
+# Machine Learning (TensorFlow is heavy - optional for now)
+scikit-learn
+
+# Discord Alerts
+requests
+discord-webhook
+
+# Dashboard
+streamlit
+plotly
+
+# Utilities
+python-dotenv
+pytz
+colorama
+tabulate
+
+# Database
+sqlalchemy

@@ -402,7 +402,7 @@ class PaperTrader:
                 new_target3 = signal['target3']
                 new_stop = signal['stop_loss']
 
-            # Add position
+            # Add position with DETAILED LOGGING for study
             position_data = {
                 'symbol': symbol,
                 'shares': shares,
@@ -427,7 +427,22 @@ class PaperTrader:
                 't3_hit': False,
                 # Trailing stop flags
                 'breakeven_active': False,
-                'trailing_active': False
+                'trailing_active': False,
+                # DETAILED ENTRY LOGGING
+                'scan_price': signal.get('entry_price', entry_price),  # Original scan price
+                'price_at_entry': entry_price,  # Actual execution price
+                'entry_indicators': {
+                    'rsi': indicators.get('rsi', 0),
+                    'macd': indicators.get('macd', 0),
+                    'macd_signal': indicators.get('macd_signal', 0),
+                    'volume_ratio': indicators.get('volume_ratio', 0),
+                    'atr': atr,
+                    'adx': indicators.get('adx', 0),
+                    'bb_position': indicators.get('bb_position', 0)
+                },
+                'entry_reason': signal.get('entry_reason', signal.get('signal_type', 'MOMENTUM')),
+                'peak_price': entry_price,  # Track highest price for trailing stop
+                'lowest_price': entry_price  # Track lowest price during trade
             }
             
             # Store buy charges for swing trades only
@@ -476,17 +491,58 @@ class PaperTrader:
 
             entry_price = position['entry_price']
             shares = position['shares']
-            
+
+            # DETAILED LOGGING: Track peak and lowest prices during trade
+            if current_price > position.get('peak_price', entry_price):
+                position['peak_price'] = current_price
+            if current_price < position.get('lowest_price', entry_price):
+                position['lowest_price'] = current_price
+
             # CRITICAL FIX: Check STOP LOSS FIRST (before any other logic)
             # This prevents positions from losing more than the stop loss amount
             # Priority 0: STOP LOSS (MUST CHECK FIRST - before trailing stops or targets)
             if current_price <= position['stop_loss']:
+                # Determine exit reason - trailing stop or regular stop loss
+                if position.get('trailing_active', False):
+                    exit_reason = '🎯 TRAILING_STOP (Profit Locked)'
+                elif position.get('breakeven_active', False):
+                    exit_reason = 'BREAKEVEN_STOP'
+                else:
+                    exit_reason = 'STOP_LOSS'
+
                 exit_info = self._exit_position(
-                    symbol, current_price, 'STOP_LOSS', full_exit=True
+                    symbol, current_price, exit_reason, full_exit=True
                 )
                 if exit_info:
                     exits.append(exit_info)
                 continue  # Position closed - don't process further
+
+            # PROGRESSIVE PROFIT ALERTS (0.5% steps after 1.5%)
+            # Alert every 0.5% increase after reaching 1.5% profit
+            profit_pct = (current_price - entry_price) / entry_price
+            progressive_start = 0.015  # Start at 1.5%
+            progressive_step = 0.005   # Alert every 0.5%
+            
+            if profit_pct >= progressive_start:
+                # Calculate current milestone (floored to nearest 0.5%)
+                current_milestone = int(profit_pct / progressive_step) * progressive_step
+                
+                # Get last alerted milestone (default to 1.0% so 1.5% is the first trigger)
+                last_milestone = position.get('last_alert_milestone', 0.01)
+                
+                # Trigger if we reached a new milestone higher than previous
+                if current_milestone > last_milestone:
+                    position['last_alert_milestone'] = current_milestone
+                    self._save_portfolio()
+                    
+                    trailing_activations.append({
+                        'type': 'PROFIT_MILESTONE',
+                        'symbol': symbol,
+                        'current_price': current_price,
+                        'profit_pct': profit_pct,
+                        'milestone': current_milestone,
+                        'stop_loss': position['stop_loss']
+                    })
 
             # HYBRID TRAILING STOP (Breakeven + ATR-based) - Lock profits surgically
             profit_pct = (current_price - entry_price) / entry_price
@@ -506,9 +562,11 @@ class PaperTrader:
                 breakeven_threshold = 0.005  # Move to breakeven at +0.5% (protect capital quickly)
                 trailing_threshold = 0.007  # Activate trailing at +0.7% (tighter than before)
             else:
-                # Positional: Standard trailing
-                breakeven_threshold = 0.02  # +2% (override for positional)
-                trailing_threshold = 0.03  # +3% (override for positional)
+                # Positional: NO FIXED TARGET - Let profits run with trailing stop!
+                # Import settings for positional trailing
+                from config.settings import POSITIONAL_TRAILING_ACTIVATION
+                breakeven_threshold = 999  # DISABLED - use trailing stop only (no breakeven needed)
+                trailing_threshold = POSITIONAL_TRAILING_ACTIVATION  # Activate trailing at +1.5%
             
             # Step 1: Move to breakeven (risk-free trade)
             breakeven_just_activated = False
@@ -542,25 +600,18 @@ class PaperTrader:
                 # Try to get ATR from position data (stored during entry) or calculate on-the-fly
                 atr = position.get('atr', 0)
                 
-                if atr > 0 and USE_ATR_STOP_LOSS:
-                    # ATR-based trailing: Strategy-specific multiplier
-                    if strategy == 'swing':
-                        # Swing: ULTRA-TIGHT trailing (0.5x ATR) to protect profits aggressively
-                        swing_atr_multiplier = 0.5  # Very tight for quick profit protection
-                        trailing_distance = atr * swing_atr_multiplier
-                    else:
-                        # Positional: Adaptive ATR multiplier based on targets hit
-                        # After T2 (90% exited), tighten ATR trailing to protect last 10%
-                        if position.get('t2_hit', False):
-                            # T2 hit: Only 10% remains - TIGHT ATR trailing (1.0x ATR)
-                            positional_atr_multiplier = 1.0  # Tighter for remaining 10%
-                        else:
-                            # Normal: Standard ATR trailing (1.8x ATR from config)
-                            positional_atr_multiplier = TRAILING_STOP_ATR_MULTIPLIER
-                        trailing_distance = atr * positional_atr_multiplier
+                if atr > 0 and USE_ATR_STOP_LOSS and strategy == 'swing':
+                    # Swing: Use ATR-based trailing (0.5x ATR)
+                    swing_atr_multiplier = 0.5  # Very tight for quick profit protection
+                    trailing_distance = atr * swing_atr_multiplier
                     atr_trailing_stop = current_price - trailing_distance
-                    # Ensure trailing stop is at least at breakeven
                     trailing_stop = max(entry_price, atr_trailing_stop)
+                elif strategy != 'swing':
+                    # Positional: Use fixed 0.5% trailing with 1.5% min profit lock (NOT ATR-based)
+                    from config.settings import POSITIONAL_TRAILING_DISTANCE, POSITIONAL_MIN_PROFIT_LOCK
+                    raw_trailing_stop = current_price * (1 - POSITIONAL_TRAILING_DISTANCE)
+                    min_profit_stop = entry_price * (1 + POSITIONAL_MIN_PROFIT_LOCK)
+                    trailing_stop = max(min_profit_stop, raw_trailing_stop)
                 else:
                     # Fallback: Strategy-specific fixed trailing if ATR unavailable
                     if strategy == 'swing':
@@ -568,15 +619,14 @@ class PaperTrader:
                         from config.settings import TRAILING_STOP_DISTANCE
                         trailing_stop = max(entry_price, current_price * (1 - TRAILING_STOP_DISTANCE))
                     else:
-                        # Positional: Adaptive trailing based on targets hit
-                        # After T2 (90% exited), tighten trailing to protect last 10%
-                        if position.get('t2_hit', False):
-                            # T2 hit: Only 10% remains - TIGHT trailing (1% distance)
-                            positional_trailing_distance = 0.010  # 1% - protect remaining 10%
-                        else:
-                            # Normal: Standard trailing (1.5% distance)
-                            positional_trailing_distance = 0.015  # 1.5% - appropriate for positional trades
-                        trailing_stop = max(entry_price, current_price * (1 - positional_trailing_distance))
+                        # Positional: Trail 0.5% below peak with 1.5% minimum profit lock
+                        from config.settings import POSITIONAL_TRAILING_DISTANCE, POSITIONAL_MIN_PROFIT_LOCK
+                        # Calculate trailing stop: 0.5% below current price
+                        raw_trailing_stop = current_price * (1 - POSITIONAL_TRAILING_DISTANCE)
+                        # Minimum profit lock: never sell below +1.5% profit
+                        min_profit_stop = entry_price * (1 + POSITIONAL_MIN_PROFIT_LOCK)
+                        # Use the higher of the two (ensures minimum 1.5% profit)
+                        trailing_stop = max(min_profit_stop, raw_trailing_stop)
                 
                 # Only raise stop loss, never lower it
                 if trailing_stop > position['stop_loss']:
@@ -604,94 +654,62 @@ class PaperTrader:
             if stop_loss_changed:
                 self._save_portfolio()
 
-            # CRITICAL FIX #3: Check TARGETS FIRST (not time!)
-            # Priority 1: Target 3 (highest profit)
-            if current_price >= position['target3'] and not position.get('t3_hit', False):
-                exit_info = self._exit_position(
-                    symbol, current_price, 'TARGET_3', full_exit=True
-                )
-                if exit_info:
-                    exits.append(exit_info)
-                    # Mark T3 as hit (position deleted on full exit, but good practice)
-                    if symbol in self.positions:
-                        self.positions[symbol]['t3_hit'] = True
-                continue  # Move to next position
+            # TARGETS: Only for SWING trades - Positional uses trailing stop only!
+            strategy = position.get('strategy', 'positional')
+            max_holding_days = position.get('max_holding_days', 1)
 
-            # Priority 2: Target 2 (good profit)
-            elif current_price >= position['target2'] and not position.get('t2_hit', False):
-                # Different exit strategies: Swing (aggressive) vs Positional (progressive 50/40/10)
-                strategy = position.get('strategy', 'positional')
-                partial_exit_pct = 1.00 if strategy == 'swing' else 0.90  # Swing: Exit remaining 40% (100% of remaining after T1's 60%), Positional: Exit 90% total (40% more after T1's 50%)
-                exit_info = self._exit_position(
-                    symbol, current_price, 'TARGET_2', partial=partial_exit_pct
-                )
-                if exit_info:
-                    exits.append(exit_info)
-                    # Adjust profit lock based on strategy
-                    if strategy == 'swing':
-                        # Swing: T2 is 1.5% - Full exit, no stop loss update needed
-                        # Position already deleted by full exit, skip stop loss update
-                        pass
-                    else:
-                        # Positional: T2 is 4% - lock at +3.5% (90% exited, only 10% remains for T3 runners)
-                        profit_lock_stop_t2 = entry_price * 1.035  # +3.5% profit locked (aggressive - protect last 10%)
+            # POSITIONAL: NO FIXED TARGETS - Exit only via trailing stop (handled above)
+            # Skip all target checks for positional trades
+            if strategy != 'swing':
+                pass  # Positional exits via trailing stop only - no fixed targets
 
-                        if symbol in self.positions and exit_info['exit_type'] == 'PARTIAL':
-                            self.positions[symbol]['stop_loss'] = profit_lock_stop_t2
-                            self.positions[symbol]['t2_hit'] = True  # Mark T2 as hit
-                            self._save_portfolio()  # Save updated stop
-                            print(f"   🔒 Stop moved to +{(profit_lock_stop_t2/entry_price - 1)*100:.1f}% (₹{profit_lock_stop_t2:.2f}) after T2 - PROFIT LOCKED!")
-                # Don't continue, check other exits too
-
-            # Priority 3: Target 1 (minimum profit)
-            elif current_price >= position['target1']:
-                # Check if T1 was already hit (price came back to T1 after partial exit)
-                t1_already_hit = position.get('t1_hit', False)
-                
-                if t1_already_hit:
-                    # T1 hit again after partial exit - Exit remaining shares FULLY to lock profit
-                    # Rationale: Price went down, came back to T1 - better to secure profit than wait for T2
-                    print(f"   💡 T1 hit again - Exiting remaining {position['shares']} shares fully to lock profit")
+            # SWING TARGETS ONLY (not positional)
+            elif strategy == 'swing':
+                # Priority 1: Target 3 (highest profit) - Swing only
+                if current_price >= position['target3'] and not position.get('t3_hit', False):
                     exit_info = self._exit_position(
-                        symbol, current_price, 'TARGET_1_REVISIT (Full Exit)', full_exit=True
+                        symbol, current_price, 'TARGET_3', full_exit=True
                     )
                     if exit_info:
                         exits.append(exit_info)
-                    continue  # Position closed
-                else:
-                    # T1 hit for first time
-                    strategy = position.get('strategy', 'positional')
-                    max_holding_days = position.get('max_holding_days', 1)
+                        if symbol in self.positions:
+                            self.positions[symbol]['t3_hit'] = True
+                    continue
 
-                    # 🎯 1% SCALPING: FULL EXIT at T1 (1% target reached)
-                    if strategy == 'swing' and max_holding_days == 0:
+                # Priority 2: Target 2 - Swing only
+                elif current_price >= position['target2'] and not position.get('t2_hit', False):
+                    exit_info = self._exit_position(
+                        symbol, current_price, 'TARGET_2', full_exit=True
+                    )
+                    if exit_info:
+                        exits.append(exit_info)
+                    continue
+
+                # Priority 3: Target 1 - Swing only
+                elif current_price >= position['target1']:
+                    # 🎯 1% SCALPING: FULL EXIT at T1
+                    if max_holding_days == 0:
                         exit_info = self._exit_position(
                             symbol, current_price, '🎯 TARGET_1_SCALP (Full 1% Exit)', full_exit=True
                         )
                     else:
-                        # Multi-day swing or positional: Partial exit
-                        # INTRADAY: Ultra-aggressive exit for swing (quick profit-taking)
-                        # POSITIONAL: Aggressive 50% exit at T1 (industry best practice for 2.5%/4%/6% targets)
-                        partial_exit_pct = 0.60 if strategy == 'swing' else 0.50  # Swing/Intraday: 60% at T1 (lock profit quickly), Positional: 50% (balanced approach)
+                        # Multi-day swing: Partial exit
+                        partial_exit_pct = 0.60  # 60% at T1
                         exit_info = self._exit_position(
                             symbol, current_price, 'TARGET_1', partial=partial_exit_pct
                         )
+
                     if exit_info:
                         exits.append(exit_info)
-                        # Adjust profit lock based on strategy
-                        if strategy == 'swing':
-                            # Swing: T1 is 1.0% - move to breakeven + small profit (risk-free trade)
-                            profit_lock_stop = entry_price * 1.005  # +0.5% profit locked (breakeven protection)
-                        else:
-                            # Positional: T1 is 2.5% - lock at +2% (50% exited, 50% remains)
-                            profit_lock_stop = entry_price * 1.020  # +2% profit locked (protect remaining 50%)
-                        
-                        if symbol in self.positions and exit_info['exit_type'] == 'PARTIAL':
+                        if exit_info['exit_type'] == 'PARTIAL' and symbol in self.positions:
+                            profit_lock_stop = entry_price * 1.005  # +0.5% profit locked
                             self.positions[symbol]['stop_loss'] = profit_lock_stop
-                            self.positions[symbol]['t1_hit'] = True  # Mark T1 as hit
-                            self._save_portfolio()  # Save updated stop
-                            print(f"   🔒 Stop moved to +{(profit_lock_stop/entry_price - 1)*100:.1f}% (₹{profit_lock_stop:.2f}) after T1 - PROFIT LOCKED!")
-                # Don't continue, check other exits too
+                            self.positions[symbol]['t1_hit'] = True
+                            self._save_portfolio()
+                            print(f"   🔒 Stop moved to +0.5% (₹{profit_lock_stop:.2f}) after T1 - PROFIT LOCKED!")
+
+                    if exit_info and exit_info.get('exit_type') == 'FULL':
+                        continue
 
             # STOP LOSS already checked at the beginning (Priority 0) - removed duplicate check
 
@@ -869,7 +887,17 @@ class PaperTrader:
                 # Reduce cost by the cost of shares sold
                 position['cost'] = position.get('cost', shares_to_sell * entry_price) - cost
 
-            # Record trade
+            # Record trade with DETAILED EXIT LOGGING for study
+            entry_date_str = position['entry_date']
+            try:
+                entry_dt = datetime.fromisoformat(entry_date_str)
+                exit_dt = datetime.now()
+                holding_days = (exit_dt - entry_dt).days
+                holding_hours = (exit_dt - entry_dt).total_seconds() / 3600
+            except:
+                holding_days = 0
+                holding_hours = 0
+
             trade_record = {
                 'symbol': symbol,
                 'entry_price': entry_price,
@@ -877,12 +905,29 @@ class PaperTrader:
                 'shares': shares_to_sell,
                 'entry_date': position['entry_date'],
                 'exit_date': datetime.now().isoformat(),
-                'pnl': pnl,  # Net P&L (after charges)
-                'pnl_percent': pnl_percent,  # Gross % (for reference)
+                'pnl': round(pnl, 2),  # Net P&L (after charges)
+                'pnl_percent': round(pnl_percent, 2),  # Gross % (for reference)
                 'reason': reason,
                 'trade_type': position['trade_type'],
                 'signal_type': position.get('signal_type', 'MOMENTUM'),  # Save signal type for analysis
-                'strategy': strategy  # Save strategy for filtering
+                'strategy': strategy,  # Save strategy for filtering
+                # DETAILED EXIT LOGGING
+                'holding_days': holding_days,
+                'holding_hours': round(holding_hours, 1),
+                'peak_price': position.get('peak_price', exit_price),
+                'lowest_price': position.get('lowest_price', entry_price),
+                'peak_profit_pct': round((position.get('peak_price', exit_price) - entry_price) / entry_price * 100, 2),
+                'max_drawdown_pct': round((position.get('lowest_price', entry_price) - entry_price) / entry_price * 100, 2),
+                'initial_stop_loss': position.get('initial_stop_loss', 0),
+                'final_stop_loss': position.get('stop_loss', 0),
+                'trailing_active': position.get('trailing_active', False),
+                'breakeven_active': position.get('breakeven_active', False),
+                'entry_score': position.get('score', 0),
+                'entry_indicators': position.get('entry_indicators', {}),
+                'entry_reason': position.get('entry_reason', 'UNKNOWN'),
+                'atr': position.get('atr', 0),
+                'cost': round(cost, 2),
+                'proceeds': round(proceeds, 2)
             }
             
             # Add charges info for swing trades only

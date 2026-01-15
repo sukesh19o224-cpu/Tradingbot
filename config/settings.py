@@ -54,14 +54,17 @@ TRAILING_STOP_ACTIVATION = 0.01  # Swing: Activate ATR-based trailing at +1% (qu
 TRAILING_STOP_DISTANCE = 0.008  # Swing fallback: Trail by 0.8% if ATR unavailable (ultra-tight)
 TRAILING_STOP_ATR_MULTIPLIER = 0.8  # Swing: Trail by 0.8x ATR (ultra-tight for quick profit-taking)
 
-# Positional Trailing Stops (hardcoded in paper_trader.py check_exits - NOT using settings above)
-# Positional uses: breakeven at +2%, trailing at +3%, ATR multiplier 0.8x (same as setting)
-# NOTE: Positional fallback uses TRAILING_STOP_DISTANCE (0.8%) - should use wider value
-# This is handled in code with strategy-specific overrides
+# Positional Trailing Stops (NO FIXED TARGET - Let profits run!)
+# Trailing activates at +1.5%, trails 0.5% below peak
+# Example: Stock at +2% → sell at +1.5%, Stock at +7% → sell at +6.5%
+# MINIMUM PROFIT LOCK: 1.5% (never sell below this once trailing activates)
+POSITIONAL_TRAILING_ACTIVATION = 0.015  # Activate trailing at +1.5% profit
+POSITIONAL_TRAILING_DISTANCE = 0.005  # Trail by 0.5% below peak (tight trailing)
+POSITIONAL_MIN_PROFIT_LOCK = 0.015  # Never sell below +1.5% once trailing activates
 
-# Stop Loss & Targets - 1% SCALPER (INTRADAY ONLY - same day exits, quick 1% profit-taking)
+# Stop Loss & Targets
 SWING_STOP_LOSS = 0.005  # 🎯 0.5% stop loss for 1% scalping (tight stop, 2:1 R:R ratio)
-POSITIONAL_STOP_LOSS = 0.02  # 2% stop loss for positional (BALANCED - tighter stops for 2-3% targets, better R:R) - UNTOUCHED
+POSITIONAL_STOP_LOSS = 0.04  # 4% stop loss for positional (wider stop, let trailing do the work)
 
 # ATR-Based Dynamic Stop Loss (Volatility-Adjusted)
 # Adapts stop loss to each stock's volatility - prevents premature exits
@@ -89,7 +92,7 @@ ATR_MAX_STOP_LOSS = 0.06  # Default: Use positional values (wider range)
 # Risk/Reward: 0.5% risk → 1% reward = 2:1 ratio (excellent for high win rate strategy)
 # Optimized for: 65-70% win rate, many trades per day, exit at T1 (1%) always
 SWING_TARGETS = [0.010, 0.015, 0.020]  # 🎯 1%, 1.5%, 2% targets (EXIT AT T1 = 1% ALWAYS)
-POSITIONAL_TARGETS = [0.025, 0.04, 0.06]  # 2.5%, 4%, 6% targets (BALANCED - 10-day rotation, institutional capital efficiency) - UNTOUCHED
+POSITIONAL_TARGETS = [0.02, 0.02, 0.02]  # 2% single target (full sell at 2% - swing trading style)
 
 # ═══════════════════════════════════════════════════════════════
 # 🎯 STRATEGY-SPECIFIC CONFIGURATIONS
@@ -113,7 +116,7 @@ MEAN_REVERSION_CONFIG = {
 
 # MOMENTUM Strategy - HIGH QUALITY for fast 2.5% movers (4-7 days)
 MOMENTUM_CONFIG = {
-    'STOP_LOSS': 0.02,  # 2% stop loss (HIGH - tighter for quick exits)
+    'STOP_LOSS': 0.04,  # 4% stop loss (BALANCED - matches positional standard)
     'TARGETS': [0.025, 0.04, 0.06],  # 2.5%, 4%, 6% targets (hit 2.5% in 4-7 days)
     'MIN_ADX': 20,  # Emerging momentum (HIGH - catch early but with confirmation)
     'MIN_RSI': 50,  # Above 50 (HIGH - momentum zone)

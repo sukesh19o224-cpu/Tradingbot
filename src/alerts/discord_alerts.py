@@ -607,7 +607,14 @@ class DiscordAlerts:
             mode = " [PAPER]" if paper_trade else ""
             
             # Determine alert type
-            if breakeven_active and not trailing_active:
+            if position_info.get('type') == 'PROFIT_MILESTONE':
+                # Progressive profit milestone alert
+                color = 16766720  # Gold/Yellow
+                emoji = "🚀"
+                milestone = position_info.get('milestone', 0)
+                title = f"🚀 PROFIT MILESTONE REACHED{mode} - {symbol}"
+                description = f"**Status:** New Profit High!\n**Milestone:** Hit +{milestone*100:.1f}%\n**Current Profit:** +{profit_pct:.2f}%\n**Action:** Secure profits & let it run!"
+            elif breakeven_active and not trailing_active:
                 # Breakeven activated
                 color = 15844367  # Gold
                 emoji = "✅"

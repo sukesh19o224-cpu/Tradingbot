@@ -466,7 +466,11 @@ class EODIntradaySystem:
         # Send trailing stop activation alerts
         if trailing_activations:
             for activation in trailing_activations:
-                print(f"   🔒 {activation['symbol']}: Trailing stop activated (Profit: +{activation['profit_pct']*100:.2f}%)")
+                if activation.get('type') == 'PROFIT_MILESTONE':
+                    print(f"   🚀 {activation['symbol']}: Profit Milestone Reached! (+{activation['profit_pct']*100:.2f}%)")
+                else:
+                    print(f"   🔒 {activation['symbol']}: Trailing stop activated (Profit: +{activation['profit_pct']*100:.2f}%)")
+                
                 if self.discord.enabled:
                     self.discord.send_trailing_stop_alert(activation, paper_trade=True)
 
@@ -507,7 +511,11 @@ class EODIntradaySystem:
         # Send trailing stop activation alerts
         if trailing_activations:
             for activation in trailing_activations:
-                print(f"   🔒 {activation['symbol']}: Trailing stop activated (Profit: +{activation['profit_pct']*100:.2f}%)")
+                if activation.get('type') == 'PROFIT_MILESTONE':
+                    print(f"   🚀 {activation['symbol']}: Profit Milestone Reached! (+{activation['profit_pct']*100:.2f}%)")
+                else:
+                    print(f"   🔒 {activation['symbol']}: Trailing stop activated (Profit: +{activation['profit_pct']*100:.2f}%)")
+                
                 if self.discord.enabled:
                     self.discord.send_trailing_stop_alert(activation, paper_trade=True)
 
