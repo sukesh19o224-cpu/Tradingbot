@@ -193,12 +193,13 @@
     }
   },
   "performance": {
-    "total_trades": 6,
-    "winning_trades": 5,
-    "losing_trades": 1,
-    "total_pnl": 839.5,
-    "best_trade": 423.0,
-    "worst_trade": -96.9
+    "total_trades": 50,
+    "winning_trades": 34,
+    "losing_trades": 16,
+    "total_pnl": 1424.85,
+    "best_trade": 772.75,
+    "worst_trade": -828.25,
+    "win_rate": 68.0
   },
   "start_date": "2026-01-05T00:00:00",
   "last_updated": "2026-01-14T13:16:11",
